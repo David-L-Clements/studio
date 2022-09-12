@@ -42,9 +42,10 @@ export default async function* streamMessages({
 
   /** Parameters indicating the time range to stream. */
   params: {
-    deviceId: string;
-    start: Time;
-    end: Time;
+    importId?: string;
+    deviceId?: string;
+    start?: Time;
+    end?: Time;
     topics: readonly string[];
     replayPolicy?: "lastPerChannel" | "";
     replayLookbackSeconds?: number;
@@ -68,9 +69,10 @@ export default async function* streamMessages({
   log.debug("streamMessages", params);
   const startTimer = performance.now();
   const { link: mcapUrl } = await api.stream({
+    importId: params.importId,
     deviceId: params.deviceId,
-    start: toRFC3339String(params.start),
-    end: toRFC3339String(params.end),
+    start: params.start ? toRFC3339String(params.start) : undefined,
+    end: params.end ? toRFC3339String(params.end) : undefined,
     topics: params.topics,
     outputFormat: "mcap0",
     replayPolicy: params.replayPolicy,

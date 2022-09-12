@@ -28,31 +28,37 @@ class FoxgloveDataPlatformDataSourceFactory implements IDataSourceFactory {
     const start = args.start as string | undefined;
     const end = args.end as string | undefined;
     const deviceId = args.deviceId as string | undefined;
-    if (!start || !end || !deviceId) {
+    const importId = args.importId as string | undefined;
+
+    if (!importId && (!deviceId || !end || !start)) {
       return;
     }
 
-    const startTime = fromRFC3339String(start);
-    const endTime = fromRFC3339String(end);
-    if (!startTime || !endTime) {
-      return;
-    }
+    const startTime = start ? fromRFC3339String(start) : undefined;
+    const endTime = end ? fromRFC3339String(end) : undefined;
+
     const source = new DataPlatformIterableSource({
       api: args.consoleApi,
-      start: startTime,
-      end: endTime,
-      deviceId,
+      ...(deviceId && { deviceId }),
+      ...(importId && { importId }),
+      ...(startTime && { start: startTime }),
+      ...(endTime && { end: endTime }),
     });
+
     return new IterablePlayer({
       metricsCollector: args.metricsCollector,
       source,
       sourceId: this.id,
       urlParams: {
-        deviceId,
-        start: toRFC3339String(startTime),
-        end: toRFC3339String(endTime),
+        ...(deviceId && { deviceId }),
+        ...(importId && { importId }),
+        ...(startTime && { startTime: toRFC3339String(startTime) }),
+        ...(endTime && { endTime: toRFC3339String(endTime) }),
       },
-      name: `${deviceId}, ${formatTimeRaw(startTime)} to ${formatTimeRaw(endTime)}`,
+      name:
+        deviceId && startTime && endTime
+          ? `${deviceId}, ${formatTimeRaw(startTime)} to ${formatTimeRaw(endTime)}`
+          : `${importId}`,
     });
   }
 }
