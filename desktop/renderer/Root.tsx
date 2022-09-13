@@ -41,30 +41,25 @@ export default function Root({
 }: {
   appConfiguration: IAppConfiguration;
 }): JSX.Element {
-  const enableExperimentalLatching: boolean =
-    (appConfiguration.get(AppSetting.EXPERIMENTAL_LATCHING) as boolean | undefined) ?? true;
-
   const dataSources: IDataSourceFactory[] = useMemo(() => {
     const sources = [
       new RosbridgeDataSourceFactory(),
       new FoxgloveWebSocketDataSourceFactory(),
       new Ros1SocketDataSourceFactory(),
-      new Ros1LocalBagDataSourceFactory({ useIterablePlayer: enableExperimentalLatching }),
-      new Ros1RemoteBagDataSourceFactory({ useIterablePlayer: enableExperimentalLatching }),
+      new Ros1LocalBagDataSourceFactory(),
+      new Ros1RemoteBagDataSourceFactory(),
       new Ros2SocketDataSourceFactory(),
-      new Ros2LocalBagDataSourceFactory({ useIterablePlayer: enableExperimentalLatching }),
+      new Ros2LocalBagDataSourceFactory(),
       new UlogLocalDataSourceFactory(),
       new VelodyneDataSourceFactory(),
-      new FoxgloveDataPlatformDataSourceFactory({
-        useIterablePlayer: enableExperimentalLatching,
-      }),
-      new SampleNuscenesDataSourceFactory({ useIterablePlayer: enableExperimentalLatching }),
-      new McapLocalDataSourceFactory({ useIterablePlayer: enableExperimentalLatching }),
-      new McapRemoteDataSourceFactory({ useIterablePlayer: enableExperimentalLatching }),
+      new FoxgloveDataPlatformDataSourceFactory(),
+      new SampleNuscenesDataSourceFactory(),
+      new McapLocalDataSourceFactory(),
+      new McapRemoteDataSourceFactory(),
     ];
 
     return sources;
-  }, [enableExperimentalLatching]);
+  }, []);
 
   if (!storageBridge) {
     throw new Error("storageBridge is missing");

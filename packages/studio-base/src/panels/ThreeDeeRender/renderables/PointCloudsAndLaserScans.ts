@@ -73,6 +73,7 @@ type PointCloudAndLaserScanUserData = BaseUserData & {
   pointsHistory: PointsAtTime[];
   material: Material;
   pickingMaterial: THREE.ShaderMaterial | LaserScanMaterial;
+  instancePickingMaterial: THREE.ShaderMaterial | LaserScanMaterial;
 };
 
 const DEFAULT_POINT_SIZE = 1.5;
@@ -157,7 +158,9 @@ const tempFieldReaders: PointCloudFieldReaders = {
 };
 
 export class PointCloudAndLaserScanRenderable extends Renderable<PointCloudAndLaserScanUserData> {
-  override dispose(): void {
+  public override pickableInstances = true;
+
+  public override dispose(): void {
     this.userData.pointCloud = undefined;
     this.userData.laserScan = undefined;
     for (const entry of this.userData.pointsHistory) {
@@ -166,18 +169,50 @@ export class PointCloudAndLaserScanRenderable extends Renderable<PointCloudAndLa
     this.userData.pointsHistory.length = 0;
     this.userData.material.dispose();
     this.userData.pickingMaterial.dispose();
+    this.userData.instancePickingMaterial.dispose();
     super.dispose();
   }
 
-  override details(): Record<string, RosValue> {
+  public override details(): Record<string, RosValue> {
     return this.userData.pointCloud ?? this.userData.laserScan ?? {};
+  }
+
+  public override instanceDetails(instanceId: number): Record<string, RosValue> | undefined {
+    if (this.userData.pointCloud) {
+      const pointCloud = this.userData.pointCloud;
+      const data = pointCloud.data;
+      const stride = getStride(pointCloud);
+      const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+      const pointStep = getStride(pointCloud);
+      const details: Record<string, RosValue> = {};
+
+      for (const field of pointCloud.fields) {
+        const pointOffset = instanceId * pointStep;
+        const reader = getReader(field, stride);
+        details[field.name] = reader?.(view, pointOffset);
+      }
+
+      return details;
+    } else if (this.userData.laserScan) {
+      const range =
+        instanceId >= 0 && instanceId < this.userData.laserScan.ranges.length
+          ? this.userData.laserScan.ranges[instanceId]
+          : undefined;
+      const intensity =
+        instanceId >= 0 && instanceId < this.userData.laserScan.intensities.length
+          ? this.userData.laserScan.intensities[instanceId]
+          : undefined;
+      return { range, intensity };
+    } else {
+      return undefined;
+    }
   }
 }
 
 export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserScanRenderable> {
   private pointCloudFieldsByTopic = new Map<string, string[]>();
 
-  constructor(renderer: Renderer) {
+  public constructor(renderer: Renderer) {
     super("foxglove.PointCloudsAndLaserScans", renderer);
 
     renderer.addDatatypeSubscriptions(ROS_POINTCLOUD_DATATYPES, this.handleRosPointCloud);
@@ -185,7 +220,7 @@ export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserS
     renderer.addDatatypeSubscriptions(LASERSCAN_DATATYPES, this.handleLaserScan);
   }
 
-  override settingsNodes(): SettingsTreeEntry[] {
+  public override settingsNodes(): SettingsTreeEntry[] {
     const configTopics = this.renderer.config.topics;
     const handler = this.handleSettingsAction;
     const entries: SettingsTreeEntry[] = [];
@@ -208,7 +243,11 @@ export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserS
     return entries;
   }
 
-  override startFrame(currentTime: bigint, renderFrameId: string, fixedFrameId: string): void {
+  public override startFrame(
+    currentTime: bigint,
+    renderFrameId: string,
+    fixedFrameId: string,
+  ): void {
     // Do not call super.startFrame() since we handle updatePose() manually.
     // Instead of updating the pose for each Renderable in this.renderables, we
     // update the pose of each THREE.Points object in the pointsHistory of each
@@ -231,7 +270,8 @@ export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserS
       // Remove expired entries from the history of points when decayTime is enabled
       const pointsHistory = renderable.userData.pointsHistory;
       const decayTime = renderable.userData.settings.decayTime;
-      const expireTime = decayTime > 0 ? currentTime - BigInt(decayTime * 1e9) : MAX_DURATION;
+      const expireTime =
+        decayTime > 0 ? currentTime - BigInt(Math.round(decayTime * 1e9)) : MAX_DURATION;
       while (pointsHistory.length > 1 && pointsHistory[0]!.receiveTime < expireTime) {
         const entry = renderable.userData.pointsHistory.shift()!;
         renderable.remove(entry.points);
@@ -272,7 +312,7 @@ export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserS
     }
   }
 
-  override handleSettingsAction = (action: SettingsTreeAction): void => {
+  public override handleSettingsAction = (action: SettingsTreeAction): void => {
     const path = action.payload.path;
     if (action.action !== "update" || path.length !== 3) {
       return;
@@ -287,7 +327,7 @@ export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserS
       const prevSettings = this.renderer.config.topics[topicName] as
         | Partial<LayerSettingsPointCloudAndLaserScan>
         | undefined;
-      const settings = { ...renderable.userData.settings, ...prevSettings };
+      const settings = { ...DEFAULT_SETTINGS, ...prevSettings };
       if (renderable.userData.pointCloud) {
         this._updatePointCloudRenderable(
           renderable,
@@ -306,7 +346,7 @@ export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserS
     }
   };
 
-  handleFoxglovePointCloud = (messageEvent: PartialMessageEvent<PointCloud>): void => {
+  private handleFoxglovePointCloud = (messageEvent: PartialMessageEvent<PointCloud>): void => {
     const topic = messageEvent.topic;
     const pointCloud = normalizePointCloud(messageEvent.message);
     const receiveTime = toNanoSec(messageEvent.receiveTime);
@@ -339,7 +379,15 @@ export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserS
 
       const material = pointCloudMaterial(settings);
       const pickingMaterial = createPickingMaterial(settings);
-      const points = createPoints(topic, getPose(pointCloud), geometry, material, pickingMaterial);
+      const instancePickingMaterial = createInstancePickingMaterial(settings);
+      const points = createPoints(
+        topic,
+        getPose(pointCloud),
+        geometry,
+        material,
+        pickingMaterial,
+        instancePickingMaterial,
+      );
 
       const messageTime = toNanoSec(pointCloud.timestamp);
       renderable = new PointCloudAndLaserScanRenderable(topic, this.renderer, {
@@ -354,6 +402,7 @@ export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserS
         pointsHistory: [{ receiveTime, messageTime, points }],
         material,
         pickingMaterial,
+        instancePickingMaterial,
       });
       renderable.add(points);
 
@@ -377,7 +426,7 @@ export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserS
     );
   };
 
-  handleRosPointCloud = (messageEvent: PartialMessageEvent<PointCloud2>): void => {
+  private handleRosPointCloud = (messageEvent: PartialMessageEvent<PointCloud2>): void => {
     const topic = messageEvent.topic;
     const pointCloud = normalizePointCloud2(messageEvent.message);
     const receiveTime = toNanoSec(messageEvent.receiveTime);
@@ -410,7 +459,15 @@ export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserS
 
       const material = pointCloudMaterial(settings);
       const pickingMaterial = createPickingMaterial(settings);
-      const points = createPoints(topic, getPose(pointCloud), geometry, material, pickingMaterial);
+      const instancePickingMaterial = createInstancePickingMaterial(settings);
+      const points = createPoints(
+        topic,
+        getPose(pointCloud),
+        geometry,
+        material,
+        pickingMaterial,
+        instancePickingMaterial,
+      );
 
       const messageTime = toNanoSec(pointCloud.header.stamp);
       renderable = new PointCloudAndLaserScanRenderable(topic, this.renderer, {
@@ -425,6 +482,7 @@ export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserS
         pointsHistory: [{ receiveTime, messageTime, points }],
         material,
         pickingMaterial,
+        instancePickingMaterial,
       });
       renderable.add(points);
 
@@ -448,7 +506,7 @@ export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserS
     );
   };
 
-  _createGeometry(topic: string, usage: THREE.Usage): DynamicFloatBufferGeometry {
+  private _createGeometry(topic: string, usage: THREE.Usage): DynamicFloatBufferGeometry {
     const geometry = new DynamicBufferGeometry(Float32Array, usage);
     geometry.name = `${topic}:PointCloud:geometry`;
     geometry.createAttribute("position", 3);
@@ -456,7 +514,7 @@ export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserS
     return geometry;
   }
 
-  _updatePointCloudRenderable(
+  private _updatePointCloudRenderable(
     renderable: PointCloudAndLaserScanRenderable,
     pointCloud: PointCloud | PointCloud2,
     settings: LayerSettingsPointCloudAndLaserScan,
@@ -511,6 +569,7 @@ export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserS
         geometry,
         material,
         renderable.userData.pickingMaterial,
+        undefined,
       );
       pointsHistory.push({ receiveTime, messageTime, points });
       renderable.add(points);
@@ -540,7 +599,7 @@ export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserS
     );
   }
 
-  _validatePointCloud(
+  private _validatePointCloud(
     pointCloud: PointCloud | PointCloud2,
     renderable: PointCloudAndLaserScanRenderable,
   ): boolean {
@@ -550,7 +609,7 @@ export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserS
       : this._validateFoxglovePointCloud(pointCloud as PointCloud, renderable);
   }
 
-  _validateFoxglovePointCloud(
+  private _validateFoxglovePointCloud(
     pointCloud: PointCloud,
     renderable: PointCloudAndLaserScanRenderable,
   ): boolean {
@@ -571,7 +630,7 @@ export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserS
     return true;
   }
 
-  _validateRosPointCloud(
+  private _validateRosPointCloud(
     pointCloud: PointCloud2,
     renderable: PointCloudAndLaserScanRenderable,
   ): boolean {
@@ -618,7 +677,7 @@ export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserS
     return true;
   }
 
-  _getPointCloudFieldReaders(
+  private _getPointCloudFieldReaders(
     output: PointCloudFieldReaders,
     pointCloud: PointCloud | PointCloud2,
     renderable: PointCloudAndLaserScanRenderable,
@@ -722,7 +781,7 @@ export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserS
     return true;
   }
 
-  _minMaxColorValues(
+  private _minMaxColorValues(
     output: THREE.Vector2Tuple,
     colorReader: FieldReader,
     view: DataView,
@@ -751,7 +810,7 @@ export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserS
     output[1] = maxColorValue;
   }
 
-  _updatePointCloudBuffers(
+  private _updatePointCloudBuffers(
     pointCloud: PointCloud | PointCloud2,
     readers: PointCloudFieldReaders,
     pointCount: number,
@@ -790,7 +849,7 @@ export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserS
     colorAttribute.needsUpdate = true;
   }
 
-  handleLaserScan = (messageEvent: PartialMessageEvent<LaserScan>): void => {
+  private handleLaserScan = (messageEvent: PartialMessageEvent<LaserScan>): void => {
     const topic = messageEvent.topic;
     const laserScan = normalizeLaserScan(messageEvent.message);
     const receiveTime = toNanoSec(messageEvent.receiveTime);
@@ -825,7 +884,15 @@ export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserS
 
       const material = new LaserScanMaterial();
       const pickingMaterial = new LaserScanMaterial({ picking: true });
-      const points = createPoints(topic, makePose(), geometry, material, pickingMaterial);
+      const instancePickingMaterial = new LaserScanInstancePickingMaterial();
+      const points = createPoints(
+        topic,
+        makePose(),
+        geometry,
+        material,
+        pickingMaterial,
+        instancePickingMaterial,
+      );
 
       material.update(settings, laserScan);
       pickingMaterial.update(settings, laserScan);
@@ -843,6 +910,7 @@ export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserS
         pointsHistory: [{ receiveTime, messageTime, points }],
         material,
         pickingMaterial,
+        instancePickingMaterial,
       });
       renderable.add(points);
 
@@ -858,7 +926,7 @@ export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserS
     );
   };
 
-  _updateLaserScanRenderable(
+  private _updateLaserScanRenderable(
     renderable: PointCloudAndLaserScanRenderable,
     laserScan: LaserScan,
     settings: LayerSettingsPointCloudAndLaserScan,
@@ -896,7 +964,14 @@ export class PointCloudsAndLaserScans extends SceneExtension<PointCloudAndLaserS
     if (isDecay) {
       // Push a new (empty) entry to the history of points
       const geometry = this._createGeometry(topic, THREE.StaticDrawUsage);
-      const points = createPoints(topic, makePose(), geometry, laserScanMaterial, pickingMaterial);
+      const points = createPoints(
+        topic,
+        makePose(),
+        geometry,
+        laserScanMaterial,
+        pickingMaterial,
+        undefined,
+      );
       pointsHistory.push({ receiveTime, messageTime, points });
       renderable.add(points);
     }
@@ -997,9 +1072,9 @@ function pointCloudMaterial(settings: LayerSettingsPointCloudAndLaserScan): THRE
 }
 
 class LaserScanMaterial extends THREE.RawShaderMaterial {
-  static MIN_PICKING_POINT_SIZE = 8;
+  private static MIN_PICKING_POINT_SIZE = 8;
 
-  constructor({ picking = false }: { picking?: boolean } = {}) {
+  public constructor({ picking = false }: { picking?: boolean } = {}) {
     super({
       vertexShader: `\
         #version 300 es
@@ -1069,13 +1144,14 @@ class LaserScanMaterial extends THREE.RawShaderMaterial {
     }
   }
 
-  update(settings: LayerSettingsPointCloudAndLaserScan, laserScan: LaserScan): void {
+  public update(settings: LayerSettingsPointCloudAndLaserScan, laserScan: LaserScan): void {
     this.uniforms.isCircle!.value = settings.pointShape === "circle";
     this.uniforms.pointSize!.value = settings.pointSize;
     this.uniforms.angleMin!.value = laserScan.angle_min;
     this.uniforms.angleIncrement!.value = laserScan.angle_increment;
     this.uniforms.rangeMin!.value = laserScan.range_min;
     this.uniforms.rangeMax!.value = laserScan.range_max;
+    this.uniformsNeedUpdate = true;
 
     const transparent = colorHasTransparency(settings);
     if (transparent !== this.transparent) {
@@ -1083,6 +1159,82 @@ class LaserScanMaterial extends THREE.RawShaderMaterial {
       this.depthWrite = !this.transparent;
       this.needsUpdate = true;
     }
+  }
+}
+
+class LaserScanInstancePickingMaterial extends THREE.RawShaderMaterial {
+  private static MIN_PICKING_POINT_SIZE = 8;
+
+  public constructor() {
+    const minPointSize = LaserScanInstancePickingMaterial.MIN_PICKING_POINT_SIZE.toFixed(1);
+    super({
+      vertexShader: `\
+        #version 300 es
+        precision highp float;
+        precision highp int;
+        uniform mat4 projectionMatrix, modelViewMatrix;
+
+        uniform float pointSize;
+        uniform float pixelRatio;
+        uniform float angleMin, angleIncrement;
+        uniform float rangeMin, rangeMax;
+        in float position; // range, but must be named position in order for three.js to render anything
+        varying vec4 objectId;
+        void main() {
+          if (position < rangeMin || position > rangeMax) {
+            gl_PointSize = 0.0;
+            return;
+          }
+          objectId = vec4(
+            float((gl_VertexID >> 24) & 255) / 255.0,
+            float((gl_VertexID >> 16) & 255) / 255.0,
+            float((gl_VertexID >> 8) & 255) / 255.0,
+            float(gl_VertexID & 255) / 255.0);
+          float angle = angleMin + angleIncrement * float(gl_VertexID);
+          vec4 pos = vec4(position * cos(angle), position * sin(angle), 0, 1.0);
+          gl_Position = projectionMatrix * modelViewMatrix * pos;
+          gl_PointSize = pixelRatio * max(pointSize, ${minPointSize});
+        }
+      `,
+      fragmentShader: `\
+        #version 300 es
+        #ifdef GL_FRAGMENT_PRECISION_HIGH
+          precision highp float;
+        #else
+          precision mediump float;
+        #endif
+        uniform bool isCircle;
+        varying vec4 objectId;
+        out vec4 outColor;
+
+        void main() {
+          if (isCircle) {
+            vec2 cxy = 2.0 * gl_PointCoord - 1.0;
+            if (dot(cxy, cxy) > 1.0) { discard; }
+          }
+          outColor = objectId;
+        }
+      `,
+    });
+    this.uniforms = {
+      isCircle: { value: false },
+      pointSize: { value: 1 },
+      pixelRatio: { value: 1 },
+      angleMin: { value: NaN },
+      angleIncrement: { value: NaN },
+      rangeMin: { value: NaN },
+      rangeMax: { value: NaN },
+    };
+  }
+
+  public update(settings: LayerSettingsPointCloudAndLaserScan, laserScan: LaserScan): void {
+    this.uniforms.isCircle!.value = settings.pointShape === "circle";
+    this.uniforms.pointSize!.value = settings.pointSize;
+    this.uniforms.angleMin!.value = laserScan.angle_min;
+    this.uniforms.angleIncrement!.value = laserScan.angle_increment;
+    this.uniforms.rangeMin!.value = laserScan.range_min;
+    this.uniforms.rangeMax!.value = laserScan.range_max;
+    this.uniformsNeedUpdate = true;
   }
 }
 
@@ -1110,6 +1262,39 @@ function createPickingMaterial(
     `,
     side: THREE.DoubleSide,
     uniforms: { pointSize: { value: pointSize }, objectId: { value: [NaN, NaN, NaN, NaN] } },
+  });
+}
+
+function createInstancePickingMaterial(
+  settings: LayerSettingsPointCloudAndLaserScan,
+): THREE.ShaderMaterial {
+  const MIN_PICKING_POINT_SIZE = 8;
+
+  // Use a custom shader for picking that sets a minimum point size to make
+  // individual points easier to click on
+  const pointSize = Math.max(settings.pointSize, MIN_PICKING_POINT_SIZE);
+  return new THREE.ShaderMaterial({
+    vertexShader: /* glsl */ `
+        uniform float pointSize;
+        varying vec4 objectId;
+        void main() {
+          objectId = vec4(
+            float((gl_VertexID >> 24) & 255) / 255.0,
+            float((gl_VertexID >> 16) & 255) / 255.0,
+            float((gl_VertexID >> 8) & 255) / 255.0,
+            float(gl_VertexID & 255) / 255.0);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = pointSize;
+        }
+      `,
+    fragmentShader: /* glsl */ `
+        varying vec4 objectId;
+        void main() {
+          gl_FragColor = objectId;
+        }
+      `,
+    side: THREE.DoubleSide,
+    uniforms: { pointSize: { value: pointSize } },
   });
 }
 
@@ -1257,6 +1442,7 @@ function settingsNode(
     input: "number",
     step: 0.5,
     placeholder: "0 seconds",
+    min: 0,
     precision: 3,
     value: decayTime,
   };
@@ -1417,6 +1603,7 @@ function createPoints(
   geometry: DynamicFloatBufferGeometry,
   material: Material,
   pickingMaterial: THREE.Material,
+  instancePickingMaterial: THREE.Material | undefined,
 ): Points {
   const points = new THREE.Points<DynamicFloatBufferGeometry, Material>(geometry, material);
   // We don't calculate the bounding sphere for points, so frustum culling is disabled
@@ -1424,6 +1611,7 @@ function createPoints(
   points.name = `${topic}:PointCloud:points`;
   points.userData = {
     pickingMaterial,
+    instancePickingMaterial,
     pose,
   };
   return points;

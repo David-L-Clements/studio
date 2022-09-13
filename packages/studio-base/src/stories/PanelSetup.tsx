@@ -32,11 +32,11 @@ import {
   useSelectedPanels,
 } from "@foxglove/studio-base/context/CurrentLayoutContext";
 import { PanelsActions } from "@foxglove/studio-base/context/CurrentLayoutContext/actions";
-import { HoverValueProvider } from "@foxglove/studio-base/context/HoverValueContext";
 import PanelCatalogContext, {
   PanelCatalog,
   PanelInfo,
 } from "@foxglove/studio-base/context/PanelCatalogContext";
+import { usePanelSettingsEditorStore } from "@foxglove/studio-base/context/PanelSettingsEditorContext";
 import {
   UserNodeStateProvider,
   useUserNodeState,
@@ -54,10 +54,8 @@ import {
 import MockCurrentLayoutProvider from "@foxglove/studio-base/providers/CurrentLayoutProvider/MockCurrentLayoutProvider";
 import ExtensionCatalogProvider from "@foxglove/studio-base/providers/ExtensionCatalogProvider";
 import HelpInfoProvider from "@foxglove/studio-base/providers/HelpInfoProvider";
-import {
-  PanelSettingsEditorContextProvider,
-  usePanelSettingsEditorStore,
-} from "@foxglove/studio-base/providers/PanelSettingsEditorContextProvider";
+import { PanelSettingsEditorContextProvider } from "@foxglove/studio-base/providers/PanelSettingsEditorContextProvider";
+import TimelineInteractionStateProvider from "@foxglove/studio-base/providers/TimelineInteractionStateProvider";
 import ThemeProvider from "@foxglove/studio-base/theme/ThemeProvider";
 import { RosDatatypes } from "@foxglove/studio-base/types/RosDatatypes";
 import { SavedProps, UserNodes } from "@foxglove/studio-base/types/panels";
@@ -79,6 +77,7 @@ export type Fixture = {
   frame?: Frame;
   topics?: Topic[];
   capabilities?: string[];
+  profile?: string;
   activeData?: Partial<PlayerStateActiveData>;
   progress?: Progress;
   datatypes?: RosDatatypes;
@@ -166,10 +165,10 @@ export const MosaicWrapper = ({ children }: { children: React.ReactNode }): JSX.
 
 // empty catalog if one is not provided via props
 class MockPanelCatalog implements PanelCatalog {
-  getPanels(): readonly PanelInfo[] {
+  public getPanels(): readonly PanelInfo[] {
     return [];
   }
-  getPanelByType(_type: string): PanelInfo | undefined {
+  public getPanelByType(_type: string): PanelInfo | undefined {
     return undefined;
   }
 }
@@ -266,6 +265,7 @@ function UnconnectedPanelSetup(props: UnconnectedProps): JSX.Element | ReactNull
     topics = [],
     datatypes,
     capabilities,
+    profile,
     activeData,
     progress,
     publish,
@@ -302,6 +302,7 @@ function UnconnectedPanelSetup(props: UnconnectedProps): JSX.Element | ReactNull
         datatypes={dTypes}
         messages={allData}
         pauseFrame={props.pauseFrame}
+        profile={profile}
         activeData={activeData}
         progress={progress}
         publish={publish}
@@ -335,7 +336,7 @@ export default function PanelSetup(props: Props): JSX.Element {
   const theme = useTheme();
   return (
     <UserNodeStateProvider>
-      <HoverValueProvider>
+      <TimelineInteractionStateProvider>
         <MockCurrentLayoutProvider onAction={props.onLayoutAction}>
           <PanelSettingsEditorContextProvider>
             <ExtensionCatalogProvider loaders={[]}>
@@ -347,7 +348,7 @@ export default function PanelSetup(props: Props): JSX.Element {
             </ExtensionCatalogProvider>
           </PanelSettingsEditorContextProvider>
         </MockCurrentLayoutProvider>
-      </HoverValueProvider>
+      </TimelineInteractionStateProvider>
     </UserNodeStateProvider>
   );
 }

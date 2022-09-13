@@ -23,10 +23,10 @@ import { useImmer } from "use-immer";
 
 import { filterMap } from "@foxglove/den/collection";
 import { SettingsTreeAction, SettingsTreeNode } from "@foxglove/studio";
+import { HighlightedText } from "@foxglove/studio-base/components/HighlightedText";
 import Stack from "@foxglove/studio-base/components/Stack";
 
 import { FieldEditor } from "./FieldEditor";
-import { HighlightedText } from "./HighlightedText";
 import { NodeActionsMenu } from "./NodeActionsMenu";
 import { VisibilityToggle } from "./VisibilityToggle";
 import { icons } from "./icons";
@@ -272,9 +272,6 @@ function NodeEditorComponent(props: NodeEditorProps): JSX.Element {
               disabled={!allowVisibilityToggle}
             />
           )}
-          {settings.actions && (
-            <NodeActionsMenu actions={settings.actions} onSelectAction={handleNodeAction} />
-          )}
           {props.settings?.error && (
             <Tooltip
               arrow
@@ -284,6 +281,9 @@ function NodeEditorComponent(props: NodeEditorProps): JSX.Element {
                 <ErrorIcon fontSize="small" />
               </IconButton>
             </Tooltip>
+          )}
+          {settings.actions && (
+            <NodeActionsMenu actions={settings.actions} onSelectAction={handleNodeAction} />
           )}
         </Stack>
       </NodeHeader>

@@ -57,11 +57,11 @@ export type MessagePipelineContext = {
   callService: (service: string, request: unknown) => Promise<unknown>;
   startPlayback?: () => void;
   pausePlayback?: () => void;
+  playUntil?: (time: Time) => void;
   setPlaybackSpeed?: (speed: number) => void;
   seekPlayback?: (time: Time) => void;
   // Don't render the next frame until the returned function has been called.
   pauseFrame: (name: string) => ResumeFrame;
-  requestBackfill: () => void;
 };
 
 // exported only for MockMessagePipelineProvider
@@ -125,7 +125,28 @@ export function MessagePipelineProvider({
     () => flatten(Object.values(publishersById)),
     [publishersById],
   );
-  useEffect(() => player?.setSubscriptions(subscriptions), [player, subscriptions]);
+
+  // Debounce the subscription updates for players. This batches multiple subscribe calls
+  // into one update for the player which avoids fetching data that will be immediately discarded.
+  //
+  // The delay of 0ms is intentional as we only want to give one timeout cycle to batch updates
+  const debouncedPlayerSetSubscriptions = useMemo(() => {
+    return debounce((subs: SubscribePayload[]) => {
+      player?.setSubscriptions(subs);
+    });
+  }, [player]);
+
+  // when unmounting or changing the debounce function cancel any pending debounce
+  useEffect(() => {
+    return () => {
+      debouncedPlayerSetSubscriptions.cancel();
+    };
+  }, [debouncedPlayerSetSubscriptions]);
+
+  useEffect(
+    () => debouncedPlayerSetSubscriptions(subscriptions),
+    [debouncedPlayerSetSubscriptions, subscriptions],
+  );
   useEffect(() => player?.setPublishers(publishers), [player, publishers]);
 
   // Slow down the message pipeline framerate to the given FPS if it is set to less than 60
@@ -176,12 +197,9 @@ export function MessagePipelineProvider({
     },
     [updateState],
   );
-  const setPublishers = useCallback(
-    (id: string, publishersForId: AdvertiseOptions[]) => {
-      setAllPublishers((p) => ({ ...p, [id]: publishersForId }));
-    },
-    [setAllPublishers],
-  );
+  const setPublishers = useCallback((id: string, publishersForId: AdvertiseOptions[]) => {
+    setAllPublishers((p) => ({ ...p, [id]: publishersForId }));
+  }, []);
   const setParameter = useCallback(
     (key: string, value: ParameterValue) => (player ? player.setParameter(key, value) : undefined),
     [player],
@@ -201,6 +219,10 @@ export function MessagePipelineProvider({
         ? player?.startPlayback?.bind(player)
         : undefined,
     [player, capabilities],
+  );
+  const playUntil = useMemo(
+    () => (player?.playUntil ? player.playUntil.bind(player) : undefined),
+    [player],
   );
   const pausePlayback = useMemo(
     () =>
@@ -230,10 +252,6 @@ export function MessagePipelineProvider({
       condvar.notifyAll();
     };
   }, []);
-  const requestBackfill = useMemo(
-    () => debounce(() => (player ? player.requestBackfill() : undefined)),
-    [player],
-  );
 
   useEffect(() => {
     player?.setGlobalVariables(globalVariables);
@@ -254,11 +272,11 @@ export function MessagePipelineProvider({
         publish,
         callService,
         startPlayback,
+        playUntil,
         pausePlayback,
         setPlaybackSpeed,
         seekPlayback,
         pauseFrame,
-        requestBackfill,
       })}
     >
       {children}

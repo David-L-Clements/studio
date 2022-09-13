@@ -16,21 +16,20 @@ import {
   ListItemButtonProps,
   ListItemText,
   Typography,
-  Button,
   Tooltip,
   InputBase,
 } from "@mui/material";
 import { pick } from "lodash";
-import { useMemo, useCallback, useState } from "react";
+import { useMemo, useCallback, useState, useRef } from "react";
 import { makeStyles } from "tss-react/mui";
 
+import CopyButton from "@foxglove/studio-base/components/CopyButton";
 import JsonInput from "@foxglove/studio-base/components/JsonInput";
 import Stack from "@foxglove/studio-base/components/Stack";
 import useGlobalVariables, {
   GlobalVariables,
 } from "@foxglove/studio-base/hooks/useGlobalVariables";
 import useLinkedGlobalVariables from "@foxglove/studio-base/panels/ThreeDimensionalViz/Interactions/useLinkedGlobalVariables";
-import clipboard from "@foxglove/studio-base/util/clipboard";
 
 const useStyles = makeStyles<void, "copyButton">()((theme, _params, classes) => ({
   root: {
@@ -97,20 +96,23 @@ const changeGlobalKey = (
   });
 };
 
-export default function Variable({
-  name,
-  selected = false,
-  linked = false,
-  linkedIndex,
-}: {
+export default function Variable(props: {
   name: string;
   selected?: ListItemButtonProps["selected"];
   linked?: boolean;
   linkedIndex: number;
 }): JSX.Element {
+  const { name, selected = false, linked = false, linkedIndex } = props;
+
   const { classes } = useStyles();
-  const [editedName, setEditedName] = useState(name);
-  const [open, setOpen] = useState<boolean>(true);
+
+  // When editing the variable name, the new name might collide with an existing variable name
+  // If the name matches an existing name, we set the edited name and show an error to the user
+  // indicating there is a name conflict. The user must resolve the name conflict or their edited
+  // name will be reset on blur.
+  const [editedName, setEditedName] = useState<string | undefined>();
+
+  const [expanded, setExpanded] = useState<boolean>(true);
   const [anchorEl, setAnchorEl] = React.useState<undefined | HTMLElement>(undefined);
   const [copied, setCopied] = useState(false);
   const menuOpen = Boolean(anchorEl);
@@ -152,16 +154,10 @@ export default function Variable({
     );
     setLinkedGlobalVariables(newLinkedGlobalVariables);
     setGlobalVariables({ [name]: undefined });
+    handleClose();
   }, [linkedGlobalVariables, name, setGlobalVariables, setLinkedGlobalVariables]);
 
   const value = useMemo(() => globalVariables[name], [globalVariables, name]);
-
-  const handleCopy = useCallback(async () => {
-    await clipboard.copy(JSON.stringify(value, undefined, 2) ?? "").then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
-  }, [value]);
 
   const onChangeValue = useCallback(
     (newVal: unknown) => {
@@ -171,20 +167,27 @@ export default function Variable({
     [name, setGlobalVariables],
   );
 
-  const onChangeName = useCallback(
-    (newName: string) => {
-      setEditedName(newName);
-      if (globalVariables[newName] == undefined) {
-        changeGlobalKey(newName, name, globalVariables, linkedIndex, overwriteGlobalVariables);
-      }
-    },
-    [globalVariables, linkedIndex, name, overwriteGlobalVariables],
-  );
+  const onBlur = () => {
+    if (
+      editedName != undefined &&
+      globalVariables[editedName] == undefined &&
+      name !== editedName
+    ) {
+      changeGlobalKey(editedName, name, globalVariables, linkedIndex, overwriteGlobalVariables);
+    }
+    setEditedName(undefined);
+  };
 
-  const nameIsInError = name !== editedName && globalVariables[editedName] != undefined;
+  const rootRef = useRef<HTMLDivElement>(ReactNull);
+
+  const activeElementIsChild = rootRef.current?.contains(document.activeElement) === true;
+
+  const isSelected = selected && !activeElementIsChild;
+  const isDuplicate =
+    editedName != undefined && editedName !== name && globalVariables[editedName] != undefined;
 
   return (
-    <Stack className={classes.root}>
+    <Stack className={classes.root} ref={rootRef}>
       <ListItem
         dense
         disablePadding
@@ -210,16 +213,16 @@ export default function Variable({
                   )
                 }
               >
-                <LinkIcon color={selected ? "primary" : "info"} style={{ opacity: 0.8 }} />
+                <LinkIcon color={isSelected ? "primary" : "info"} style={{ opacity: 0.8 }} />
               </Tooltip>
             )}
             <IconButton
               size="small"
               id="variable-action-button"
               data-testid="variable-action-button"
-              aria-controls={open ? "variable-action-menu" : undefined}
+              aria-controls={expanded ? "variable-action-menu" : undefined}
               aria-haspopup="true"
-              aria-expanded={open ? "true" : undefined}
+              aria-expanded={expanded ? "true" : undefined}
               onClick={handleClick}
             >
               <MoreVertIcon fontSize="small" />
@@ -259,30 +262,36 @@ export default function Variable({
       >
         <ListItemButton
           className={classes.listItemButton}
-          selected={selected}
-          onClick={() => setOpen(!open)}
+          selected={isSelected}
+          onClick={() => setExpanded(!expanded)}
         >
           <ListItemText
             primary={
               <Stack direction="row" alignItems="center" style={{ marginLeft: -12 }}>
-                <ArrowDropDownIcon style={{ transform: !open ? "rotate(-90deg)" : undefined }} />
+                <ArrowDropDownIcon
+                  style={{ transform: !expanded ? "rotate(-90deg)" : undefined }}
+                />
                 {linked ? (
                   name
                 ) : (
                   <>
                     <InputBase
                       className={classes.input}
-                      autoFocus={editedName === ""}
-                      error={nameIsInError}
-                      value={editedName}
+                      autoFocus={name === ""}
+                      error={isDuplicate}
+                      value={editedName ?? name}
                       placeholder="variable_name"
-                      data-testid={`global-variable-key-input-${editedName}`}
+                      data-testid={`global-variable-key-input-${name}`}
                       onClick={(e) => e.stopPropagation()}
-                      onFocus={() => editedName === "" && setOpen(true)}
-                      onChange={(event) => onChangeName(event.target.value)}
+                      onFocus={() => editedName === "" && setExpanded(true)}
+                      onChange={(event) => setEditedName(event.target.value)}
+                      onBlur={onBlur}
                       endAdornment={
-                        nameIsInError && (
-                          <Tooltip arrow title="A variable with this name already exists">
+                        isDuplicate && (
+                          <Tooltip
+                            arrow
+                            title="A variable with this name already exists. Please select a unique variable name to save changes."
+                          >
                             <ErrorIcon className={classes.edgeEnd} fontSize="small" color="error" />
                           </Tooltip>
                         )
@@ -300,17 +309,17 @@ export default function Variable({
           />
         </ListItemButton>
       </ListItem>
-      {open && (
+      {expanded && (
         <div className={classes.editorWrapper}>
           <Divider />
-          <Button
+          <CopyButton
             className={classes.copyButton}
             size="small"
-            onClick={handleCopy}
             color={copied ? "primary" : "inherit"}
+            value={JSON.stringify(value, undefined, 2) ?? ""}
           >
             {copied ? "Copied" : "Copy"}
-          </Button>
+          </CopyButton>
           <JsonInput value={value} readOnly={linked} onChange={onChangeValue} />
         </div>
       )}
