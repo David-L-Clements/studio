@@ -10,10 +10,10 @@ import { parseChannel } from "@foxglove/mcap-support";
 import {
   clampTime,
   fromRFC3339String,
-  toRFC3339String,
   isGreaterThan,
   isLessThan,
   Time,
+  toRFC3339String,
 } from "@foxglove/rostime";
 import {
   PlayerProblem,
@@ -38,8 +38,8 @@ const log = Logger.getLogger(__filename);
 
 type DataPlatformIterableSourceOptions = {
   api: ConsoleApi;
-  importId?: string;
   deviceId?: string;
+  importId?: string;
   start?: Time;
   end?: Time;
 };
@@ -47,10 +47,10 @@ type DataPlatformIterableSourceOptions = {
 export class DataPlatformIterableSource implements IIterableSource {
   private readonly _consoleApi: ConsoleApi;
 
-  private _importId: string | undefined;
-  private _deviceId: string | undefined;
   private _start: Time | undefined;
   private _end: Time | undefined;
+  private _deviceId: string | undefined;
+  private _importId: string | undefined;
   private _knownTopicNames: string[] = [];
 
   /**
@@ -107,13 +107,15 @@ export class DataPlatformIterableSource implements IIterableSource {
       );
     }
 
-    const device = this._deviceId ? await this._consoleApi.getDevice(this._deviceId) : undefined;
+    const device = await this._consoleApi.getDevice(
+      this._deviceId ?? coverageStart?.deviceId ?? "",
+    );
 
-    if (this._start && isLessThan(this._start, coverageStartTime)) {
+    if (!this._start || isLessThan(this._start, coverageStartTime)) {
       log.debug("Increased start time from", this._start, "to", coverageStartTime);
       this._start = coverageStartTime;
     }
-    if (this._end && isGreaterThan(this._end, coverageEndTime)) {
+    if (!this._end || isGreaterThan(this._end, coverageEndTime)) {
       log.debug("Reduced end time from", this._end, "to", coverageEndTime);
       this._end = coverageEndTime;
     }
@@ -172,12 +174,12 @@ export class DataPlatformIterableSource implements IIterableSource {
       topics,
       topicStats,
       datatypes,
-      start: this._start ?? coverageStartTime,
-      end: this._end ?? coverageEndTime,
+      start: this._start,
+      end: this._end,
       profile: undefined,
       problems,
       publishersByTopic: new Map(),
-      name: device ? `${device.name} (${device.id})` : `${this._importId}`,
+      name: `${device.name} (${device.id})`,
     };
   }
 
@@ -208,18 +210,12 @@ export class DataPlatformIterableSource implements IIterableSource {
     const streamEnd =
       this._end && this._start
         ? clampTime(args.end ?? this._end, this._start, this._end)
-        : undefined;
+        : args.end ?? this._end;
 
     const stream = streamMessages({
       api,
       parsedChannelsByTopic,
-      params: {
-        ...(importId && { importId }),
-        ...(deviceId && { deviceId }),
-        ...(streamStart && { start: streamStart }),
-        ...(streamEnd && { end: streamEnd }),
-        topics: args.topics,
-      },
+      params: { deviceId, importId, start: streamStart, end: streamEnd, topics: args.topics },
     });
 
     for await (const messages of stream) {
@@ -246,8 +242,8 @@ export class DataPlatformIterableSource implements IIterableSource {
       parsedChannelsByTopic: this._parsedChannelsByTopic,
       signal: abortSignal,
       params: {
-        importId: this._importId,
         deviceId: this._deviceId,
+        importId: this._importId,
         start: time,
         end: time,
         topics,
