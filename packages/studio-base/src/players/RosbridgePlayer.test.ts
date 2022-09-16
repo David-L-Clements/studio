@@ -11,6 +11,7 @@
 //   found at http://www.apache.org/licenses/LICENSE-2.0
 //   You may not use this file except in compliance with the License.
 
+import { signal } from "@foxglove/den/async";
 import { Time } from "@foxglove/rostime";
 import NoopMetricsCollector from "@foxglove/studio-base/players/NoopMetricsCollector";
 import RosbridgePlayer from "@foxglove/studio-base/players/RosbridgePlayer";
@@ -43,6 +44,7 @@ const textMessage = ({ text }: { text: string }) => {
 let workerInstance: MockRosClient;
 class MockRosClient {
   public constructor() {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     workerInstance = this;
   }
 
@@ -118,7 +120,7 @@ class MockRosTopic {
   }
 }
 
-jest.mock("roslib", () => {
+jest.mock("@foxglove/roslibjs", () => {
   return {
     __esModule: true,
     default: {
@@ -143,7 +145,7 @@ describe("RosbridgePlayer", () => {
     player.close();
   });
 
-  it("subscribes to topics without errors", (done) => {
+  it("subscribes to topics without errors", async () => {
     workerInstance.setup({
       topics: ["/topic/A"],
       types: ["/std_msgs/Header", "rosgraph_msgs/Log"],
@@ -158,6 +160,7 @@ describe("RosbridgePlayer", () => {
       ],
     });
 
+    const sig = signal();
     player.setSubscriptions([{ topic: "/topic/A" }]);
     player.setListener(async ({ activeData }) => {
       const { topics } = activeData ?? {};
@@ -166,8 +169,10 @@ describe("RosbridgePlayer", () => {
       }
 
       expect(topics).toStrictEqual([{ name: "/topic/A", datatype: "/std_msgs/Header" }]);
-      done();
+      sig.resolve();
     });
+
+    await sig;
   });
 
   describe("parsedMessages", () => {
@@ -204,9 +209,10 @@ describe("RosbridgePlayer", () => {
       });
     });
 
-    it("returns parsedMessages with complex type", (done) => {
+    it("returns parsedMessages with complex type", async () => {
       player.setSubscriptions([{ topic: "/topic/A" }]);
 
+      const sig = signal();
       player.setListener(async ({ activeData }) => {
         const { messages } = activeData ?? {};
         if (!messages) {
@@ -222,13 +228,15 @@ describe("RosbridgePlayer", () => {
           },
         });
 
-        done();
+        sig.resolve();
       });
+      await sig;
     });
 
-    it("returns parsedMessages with basic types", (done) => {
+    it("returns parsedMessages with basic types", async () => {
       player.setSubscriptions([{ topic: "/topic/B" }]);
 
+      const sig = signal();
       player.setListener(async ({ activeData }) => {
         const { messages } = activeData ?? {};
         if (!messages) {
@@ -240,8 +248,9 @@ describe("RosbridgePlayer", () => {
           text: "some text",
         });
 
-        done();
+        sig.resolve();
       });
+      await sig;
     });
   });
 });

@@ -27,6 +27,7 @@ import {
   toSec,
 } from "@foxglove/rostime";
 import { MessageEvent } from "@foxglove/studio";
+import { AppSetting } from "@foxglove/studio-base/AppSetting";
 import { useBlocksByTopic, useMessageReducer } from "@foxglove/studio-base/PanelAPI";
 import { MessageBlock } from "@foxglove/studio-base/PanelAPI/useBlocksByTopic";
 import parseRosPath, {
@@ -52,6 +53,7 @@ import {
   ChartDefaultView,
   TimeBasedChartTooltipData,
 } from "@foxglove/studio-base/components/TimeBasedChart";
+import { useAppConfigurationValue } from "@foxglove/studio-base/hooks";
 import { OnClickArg as OnChartClickArgs } from "@foxglove/studio-base/src/components/Chart";
 import { OpenSiblingPanel, PanelConfig, SaveConfig } from "@foxglove/studio-base/types/panels";
 import { getTimestampForMessage } from "@foxglove/studio-base/util/time";
@@ -120,18 +122,42 @@ const getMessagePathItemsForBlock = memoizeWeak(
 
 const ZERO_TIME = { sec: 0, nsec: 0 };
 
+const performance = window.performance;
+
 function getBlockItemsByPath(
   decodeMessagePathsForMessagesByTopic: (_: MessageBlock) => MessageDataItemsByPath,
   blocks: readonly MessageBlock[],
 ) {
   const ret: Record<string, PlotDataItem[][]> = {};
   const lastBlockIndexForPath: Record<string, number> = {};
-  blocks.forEach((block, i: number) => {
+  let count = 0;
+  let i = 0;
+  for (const block of blocks) {
     const messagePathItemsForBlock: PlotDataByPath = getMessagePathItemsForBlock(
       decodeMessagePathsForMessagesByTopic,
       block,
     );
-    Object.entries(messagePathItemsForBlock).forEach(([path, messagePathItems]) => {
+
+    // After 1 million data points we check if there is more memory to continue loading more
+    // data points. This helps prevent runaway memory use if the user tried to plot a binary topic.
+    //
+    // An example would be to try plotting `/map.data[:]` where map is an occupancy grid
+    // this can easily result in many millions of points.
+    if (count >= 1_000_000) {
+      // if we have memory stats we can let the user have more points as long as memory is not under pressure
+      if (performance.memory) {
+        const pct = performance.memory.usedJSHeapSize / performance.memory.jsHeapSizeLimit;
+        if (isNaN(pct) || pct > 0.6) {
+          return ret;
+        }
+      } else {
+        return ret;
+      }
+    }
+
+    for (const [path, messagePathItems] of Object.entries(messagePathItemsForBlock)) {
+      count += messagePathItems[0]?.[0]?.queriedData.length ?? 0;
+
       const existingItems = ret[path] ?? [];
       // getMessagePathItemsForBlock returns an array of exactly one range of items.
       const [pathItems] = messagePathItems;
@@ -152,8 +178,10 @@ function getBlockItemsByPath(
       }
       ret[path] = existingItems;
       lastBlockIndexForPath[path] = i;
-    });
-  });
+    }
+
+    i += 1;
+  }
   return ret;
 }
 
@@ -446,6 +474,10 @@ function Plot(props: Props) {
 
   usePlotPanelSettings(config, saveConfig);
 
+  const [seriesSettings = false] = useAppConfigurationValue(
+    AppSetting.ENABLE_PLOT_PANEL_SERIES_SETTINGS,
+  );
+
   const stackDirection = useMemo(
     () => (legendDisplay === "top" ? "column" : "row"),
     [legendDisplay],
@@ -480,19 +512,21 @@ function Plot(props: Props) {
         fullWidth
         style={{ height: `calc(100% - ${PANEL_TOOLBAR_MIN_HEIGHT}px)` }}
       >
-        <PlotLegend
-          paths={yAxisPaths}
-          datasets={datasets}
-          currentTime={currentTimeSinceStart}
-          saveConfig={saveConfig}
-          showLegend={showLegend}
-          xAxisVal={xAxisVal}
-          xAxisPath={xAxisPath}
-          pathsWithMismatchedDataLengths={pathsWithMismatchedDataLengths}
-          legendDisplay={legendDisplay}
-          showPlotValuesInLegend={showPlotValuesInLegend}
-          sidebarDimension={sidebarDimension}
-        />
+        {seriesSettings === false && (
+          <PlotLegend
+            paths={yAxisPaths}
+            datasets={datasets}
+            currentTime={currentTimeSinceStart}
+            saveConfig={saveConfig}
+            showLegend={showLegend}
+            xAxisVal={xAxisVal}
+            xAxisPath={xAxisPath}
+            pathsWithMismatchedDataLengths={pathsWithMismatchedDataLengths}
+            legendDisplay={legendDisplay}
+            showPlotValuesInLegend={showPlotValuesInLegend}
+            sidebarDimension={sidebarDimension}
+          />
+        )}
         <Stack flex="auto" alignItems="center" justifyContent="center" overflow="hidden">
           <PlotChart
             isSynced={xAxisVal === "timestamp" && isSynced}

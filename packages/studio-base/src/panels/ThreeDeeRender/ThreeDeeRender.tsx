@@ -30,6 +30,7 @@ import {
   RenderState,
   SettingsTreeAction,
   SettingsTreeNodes,
+  Subscription,
   Topic,
   VariableValue,
 } from "@foxglove/studio";
@@ -42,13 +43,15 @@ import ThemeProvider from "@foxglove/studio-base/theme/ThemeProvider";
 
 import { DebugGui } from "./DebugGui";
 import { Interactions, InteractionContextMenu, SelectionObject, TabType } from "./Interactions";
+import type { PickedRenderable } from "./Picker";
 import type { Renderable } from "./Renderable";
-import { MessageHandler, Renderer, RendererConfig } from "./Renderer";
+import { Renderer, RendererConfig, RendererEvents, RendererSubscription } from "./Renderer";
 import { RendererContext, useRenderer, useRendererEvent } from "./RendererContext";
 import { Stats } from "./Stats";
 import { CameraState, DEFAULT_CAMERA_STATE, MouseEventObject } from "./camera";
 import {
-  PublishDatatypes,
+  PublishRos1Datatypes,
+  PublishRos2Datatypes,
   makePointMessage,
   makePoseEstimateMessage,
   makePoseMessage,
@@ -64,6 +67,11 @@ const PANEL_STYLE: React.CSSProperties = {
   height: "100%",
   display: "flex",
   position: "relative",
+};
+
+type SubscriptionWithOptions = Subscription & {
+  preload: boolean;
+  forced: boolean;
 };
 
 const PublishClickIcons: Record<PublishClickType, React.ReactNode> = {
@@ -93,8 +101,10 @@ function RendererOverlay(props: {
     clientX: 0,
     clientY: 0,
   });
-  const [selectedRenderables, setSelectedRenderables] = useState<Renderable[]>([]);
-  const [selectedRenderable, setSelectedRenderable] = useState<Renderable | undefined>(undefined);
+  const [selectedRenderables, setSelectedRenderables] = useState<PickedRenderable[]>([]);
+  const [selectedRenderable, setSelectedRenderable] = useState<PickedRenderable | undefined>(
+    undefined,
+  );
   const [interactionsTabType, setInteractionsTabType] = useState<TabType | undefined>(undefined);
   const renderer = useRenderer();
 
@@ -108,11 +118,11 @@ function RendererOverlay(props: {
     }
   }, [interactionsTabType, renderer]);
 
-  useRendererEvent("renderablesClicked", (renderables, cursorCoords) => {
+  useRendererEvent("renderablesClicked", (selections, cursorCoords) => {
     const rect = props.canvas!.getBoundingClientRect();
     setClickedPosition({ clientX: rect.left + cursorCoords.x, clientY: rect.top + cursorCoords.y });
-    setSelectedRenderables(renderables);
-    setSelectedRenderable(renderables.length === 1 ? renderables[0] : undefined);
+    setSelectedRenderables(selections);
+    setSelectedRenderable(selections.length === 1 ? selections[0] : undefined);
   });
 
   const stats = props.enableStats ? (
@@ -132,18 +142,18 @@ function RendererOverlay(props: {
   // of candidate objects to select
   const clickedObjects = useMemo<MouseEventObject[]>(
     () =>
-      selectedRenderables.map((renderable) => ({
+      selectedRenderables.map((selection) => ({
         object: {
-          pose: renderable.userData.pose,
-          scale: renderable.scale,
+          pose: selection.renderable.userData.pose,
+          scale: selection.renderable.scale,
           color: undefined,
           interactionData: {
-            topic: renderable.name,
+            topic: selection.renderable.name,
             highlighted: undefined,
-            renderable,
+            renderable: selection.renderable,
           },
         },
-        instanceIndex: undefined,
+        instanceIndex: selection.instanceIndex,
       })),
     [selectedRenderables],
   );
@@ -155,14 +165,20 @@ function RendererOverlay(props: {
       selectedRenderable
         ? {
             object: {
-              pose: selectedRenderable.userData.pose,
+              pose: selectedRenderable.renderable.userData.pose,
               interactionData: {
-                topic: (selectedRenderable.userData as { topic?: string }).topic,
+                topic: (selectedRenderable.renderable.userData as { topic?: string }).topic,
                 highlighted: true,
-                originalMessage: selectedRenderable.details(),
+                originalMessage: selectedRenderable.renderable.details(),
+                instanceDetails:
+                  selectedRenderable.instanceIndex != undefined
+                    ? selectedRenderable.renderable.instanceDetails(
+                        selectedRenderable.instanceIndex,
+                      )
+                    : undefined,
               },
             },
-            instanceIndex: undefined,
+            instanceIndex: selectedRenderable.instanceIndex,
           }
         : undefined,
     [selectedRenderable],
@@ -301,8 +317,9 @@ function RendererOverlay(props: {
               const renderable = (
                 selection.object as unknown as { interactionData: { renderable: Renderable } }
               ).interactionData.renderable;
+              const instanceIndex = selection.instanceIndex;
               setSelectedRenderables([]);
-              setSelectedRenderable(renderable);
+              setSelectedRenderable({ renderable, instanceIndex });
             }
           }}
         />
@@ -311,6 +328,28 @@ function RendererOverlay(props: {
       {debug}
     </React.Fragment>
   );
+}
+
+function useRendererProperty<K extends keyof Renderer>(
+  renderer: Renderer | undefined,
+  key: K,
+  event: keyof RendererEvents,
+  fallback: () => Renderer[K],
+): Renderer[K] {
+  const [value, setValue] = useState(() => renderer?.[key] ?? fallback());
+  useEffect(() => {
+    if (!renderer) {
+      return;
+    }
+    const onChange = () => setValue(renderer[key]);
+    onChange();
+
+    renderer.addListener(event, onChange);
+    return () => {
+      renderer.removeListener(event, onChange);
+    };
+  }, [renderer, event, key]);
+  return value;
 }
 
 /**
@@ -332,6 +371,7 @@ export function ThreeDeeRender({ context }: { context: PanelExtensionContext }):
 
     return {
       cameraState,
+      followMode: partialConfig?.followMode ?? "follow-pose",
       followTf: partialConfig?.followTf,
       scene: partialConfig?.scene ?? {},
       transforms: partialConfig?.transforms ?? {},
@@ -345,9 +385,9 @@ export function ThreeDeeRender({ context }: { context: PanelExtensionContext }):
   const backgroundColor = config.scene.backgroundColor;
 
   const [canvas, setCanvas] = useState<HTMLCanvasElement | ReactNull>(ReactNull);
-  const [renderer, setRenderer] = useState<Renderer | ReactNull>(ReactNull);
+  const [renderer, setRenderer] = useState<Renderer | undefined>(undefined);
   useEffect(
-    () => setRenderer(canvas ? new Renderer(canvas, configRef.current) : ReactNull),
+    () => setRenderer(canvas ? new Renderer(canvas, configRef.current) : undefined),
     [canvas],
   );
 
@@ -356,34 +396,37 @@ export function ThreeDeeRender({ context }: { context: PanelExtensionContext }):
   const [parameters, setParameters] = useState<ReadonlyMap<string, ParameterValue> | undefined>();
   const [variables, setVariables] = useState<ReadonlyMap<string, VariableValue> | undefined>();
   const [messages, setMessages] = useState<ReadonlyArray<MessageEvent<unknown>> | undefined>();
+  const [preloadedMessages, setPreloadedMessages] = useState<
+    ReadonlyArray<MessageEvent<unknown>> | undefined
+  >();
   const [currentTime, setCurrentTime] = useState<bigint | undefined>();
   const [didSeek, setDidSeek] = useState<boolean>(false);
 
   const renderRef = useRef({ needsRender: false });
   const [renderDone, setRenderDone] = useState<(() => void) | undefined>();
 
-  const datatypeHandlers = useMemo(
-    () => renderer?.datatypeHandlers ?? new Map<string, MessageHandler[]>(),
-    [renderer],
+  const datatypeHandlers = useRendererProperty(
+    renderer,
+    "datatypeHandlers",
+    "datatypeHandlersChanged",
+    () => new Map(),
   );
-  const forcedDatatypeHandlers = useMemo(
-    () => renderer?.forcedDatatypeHandlers ?? new Map<string, MessageHandler[]>(),
-    [renderer],
-  );
-  const topicHandlers = useMemo(
-    () => renderer?.topicHandlers ?? new Map<string, MessageHandler[]>(),
-    [renderer],
-  );
-  const forcedTopicHandlers = useMemo(
-    () => renderer?.forcedTopicHandlers ?? new Map<string, MessageHandler[]>(),
-    [renderer],
+  const topicHandlers = useRendererProperty(
+    renderer,
+    "topicHandlers",
+    "topicHandlersChanged",
+    () => new Map(),
   );
 
   // Config cameraState
   useEffect(() => {
     const listener = () => {
       if (renderer) {
-        setConfig((prevConfig) => ({ ...prevConfig, cameraState: renderer.getCameraState() }));
+        const newCameraState = renderer.getCameraState();
+        // This needs to be before `setConfig` otherwise flickering will occur during
+        // non-follow mode playback
+        renderer.setCameraState(newCameraState);
+        setConfig((prevConfig) => ({ ...prevConfig, cameraState: newCameraState }));
       }
     };
     renderer?.addListener("cameraMove", listener);
@@ -404,7 +447,12 @@ export function ThreeDeeRender({ context }: { context: PanelExtensionContext }):
 
   // Handle user changes in the settings sidebar
   const actionHandler = useCallback(
-    (action: SettingsTreeAction) => renderer?.settings.handleAction(action),
+    (action: SettingsTreeAction) =>
+      // Wrapping in unstable_batchedUpdates causes React to run effects _after_ the handleAction
+      // function has finished executing. This allows scene extensions that call
+      // renderer.updateConfig to read out the new config value and configure their renderables
+      // before the render occurs.
+      ReactDOM.unstable_batchedUpdates(() => renderer?.settings.handleAction(action)),
     [renderer],
   );
 
@@ -422,8 +470,8 @@ export function ThreeDeeRender({ context }: { context: PanelExtensionContext }):
 
   // Write to a global variable when the current selection changes
   const updateSelectedRenderable = useCallback(
-    (renderable: Renderable | undefined) => {
-      const id = (renderable?.details() as { id?: number | string } | undefined)?.id;
+    (selection: PickedRenderable | undefined) => {
+      const id = (selection?.renderable.details() as { id?: number | string } | undefined)?.id;
       context.setVariable(SELECTED_ID_VARIABLE, id ?? ReactNull);
     },
     [context],
@@ -505,19 +553,16 @@ export function ThreeDeeRender({ context }: { context: PanelExtensionContext }):
         setVariables(renderState.variables);
 
         // currentFrame has messages on subscribed topics since the last render call
-        if (renderState.currentFrame) {
-          // Fully parse lazy messages
-          for (const messageEvent of renderState.currentFrame) {
-            const maybeLazy = messageEvent.message as { toJSON?: () => unknown };
-            if ("toJSON" in maybeLazy) {
-              (messageEvent as { message: unknown }).message = maybeLazy.toJSON!();
-            }
-          }
-        }
+        deepParseMessageEvents(renderState.currentFrame);
         setMessages(renderState.currentFrame);
+
+        // allFrames has messages on preloaded topics across all frames (as they are loaded)
+        deepParseMessageEvents(renderState.allFrames);
+        setPreloadedMessages(renderState.allFrames);
       });
     };
 
+    context.watch("allFrames");
     context.watch("colorScheme");
     context.watch("currentFrame");
     context.watch("currentTime");
@@ -528,43 +573,54 @@ export function ThreeDeeRender({ context }: { context: PanelExtensionContext }):
   }, [context]);
 
   // Build a list of topics to subscribe to
-  const [topicsToSubscribe, setTopicsToSubscribe] = useState<string[] | undefined>(undefined);
+  const [topicsToSubscribe, setTopicsToSubscribe] = useState<SubscriptionWithOptions[] | undefined>(
+    undefined,
+  );
   useEffect(() => {
-    const subscriptions = new Set<string>();
+    const subscriptions = new Map<string, SubscriptionWithOptions>();
     if (!topics) {
       setTopicsToSubscribe(undefined);
       return;
     }
 
+    const updateSubscriptions = (topic: string, rendererSubscription: RendererSubscription) => {
+      let topicSubscription = subscriptions.get(topic);
+      if (!topicSubscription) {
+        topicSubscription = {
+          topic,
+          forced: rendererSubscription.forced ?? false,
+          preload: rendererSubscription.preload ?? false,
+        };
+        subscriptions.set(topic, topicSubscription);
+      }
+      topicSubscription.preload ||= rendererSubscription.preload ?? false;
+      topicSubscription.forced ||= rendererSubscription.forced ?? false;
+    };
+
     for (const topic of topics) {
-      if (forcedTopicHandlers.has(topic.name) || forcedDatatypeHandlers.has(topic.datatype)) {
-        subscriptions.add(topic.name);
-      } else if (topicHandlers.has(topic.name) || datatypeHandlers.has(topic.datatype)) {
-        // Only subscribe if the topic visibility has been toggled on
-        if (config.topics[topic.name]?.visible === true) {
-          subscriptions.add(topic.name);
-        }
+      for (const rendererSubscription of topicHandlers.get(topic.name) ?? []) {
+        updateSubscriptions(topic.name, rendererSubscription);
+      }
+      for (const rendererSubscription of datatypeHandlers.get(topic.datatype) ?? []) {
+        updateSubscriptions(topic.name, rendererSubscription);
       }
     }
 
-    const newTopics = Array.from(subscriptions.keys()).sort();
-    setTopicsToSubscribe((prevTopics) => (isEqual(prevTopics, newTopics) ? prevTopics : newTopics));
-  }, [
-    topics,
-    config.topics,
-    datatypeHandlers,
-    topicHandlers,
-    forcedTopicHandlers,
-    forcedDatatypeHandlers,
-  ]);
+    const newTopics = [...subscriptions.values()]
+      // Only subscribe if the subscription is forced or topic visibility has been toggled on
+      .filter((a) => a.forced || config.topics[a.topic]?.visible === true)
+      // Sort the list to make comparisons stable
+      .sort((a, b) => a.topic.localeCompare(b.topic));
+    setTopicsToSubscribe((prev) => (areSubscriptionsEqual(prev, newTopics) ? prev : newTopics));
+  }, [topics, config.topics, datatypeHandlers, topicHandlers]);
 
   // Notify the extension context when our subscription list changes
   useEffect(() => {
     if (!topicsToSubscribe) {
       return;
     }
-    log.debug(`Subscribing to [${topicsToSubscribe.join(", ")}]`);
-    context.subscribe(topicsToSubscribe.map((topic) => ({ topic, preload: false })));
+    log.debug(`Subscribing to [${topicsToSubscribe.map((t) => JSON.stringify(t)).join(", ")}]`);
+    context.subscribe(topicsToSubscribe);
   }, [context, topicsToSubscribe]);
 
   // Keep the renderer parameters up to date
@@ -623,10 +679,30 @@ export function ThreeDeeRender({ context }: { context: PanelExtensionContext }):
     renderRef.current.needsRender = true;
   }, [messages, renderer, topicsToDatatypes]);
 
+  // Handle preloaded messages and render a frame if new messages are available
+  useEffect(() => {
+    if (!renderer || !preloadedMessages) {
+      return;
+    }
+
+    for (const message of preloadedMessages) {
+      const datatype = topicsToDatatypes.get(message.topic);
+      if (!datatype) {
+        continue;
+      }
+
+      renderer.addMessageEvent(message, datatype);
+    }
+
+    renderRef.current.needsRender = true;
+  }, [preloadedMessages, renderer, topicsToDatatypes]);
+
   // Update the renderer when the camera moves
   useEffect(() => {
-    renderer?.setCameraState(cameraState);
-    renderRef.current.needsRender = true;
+    if (!isEqual(cameraState, renderer?.getCameraState())) {
+      renderer?.setCameraState(cameraState);
+      renderRef.current.needsRender = true;
+    }
   }, [cameraState, renderer]);
 
   // Render a new frame if requested
@@ -688,14 +764,12 @@ export function ThreeDeeRender({ context }: { context: PanelExtensionContext }):
   }, [config.publish.poseTopic, config.publish.pointTopic, config.publish.poseEstimateTopic]);
 
   useEffect(() => {
-    context.advertise?.(publishTopics.goal, "geometry_msgs/PoseStamped", {
-      datatypes: PublishDatatypes,
-    });
-    context.advertise?.(publishTopics.point, "geometry_msgs/PointStamped", {
-      datatypes: PublishDatatypes,
-    });
+    const datatypes =
+      context.dataSourceProfile === "ros2" ? PublishRos2Datatypes : PublishRos1Datatypes;
+    context.advertise?.(publishTopics.goal, "geometry_msgs/PoseStamped", { datatypes });
+    context.advertise?.(publishTopics.point, "geometry_msgs/PointStamped", { datatypes });
     context.advertise?.(publishTopics.pose, "geometry_msgs/PoseWithCovarianceStamped", {
-      datatypes: PublishDatatypes,
+      datatypes,
     });
 
     return () => {
@@ -703,7 +777,7 @@ export function ThreeDeeRender({ context }: { context: PanelExtensionContext }):
       context.unadvertise?.(publishTopics.point);
       context.unadvertise?.(publishTopics.pose);
     };
-  }, [publishTopics, context]);
+  }, [publishTopics, context, context.dataSourceProfile]);
 
   const latestPublishConfig = useLatest(config.publish);
 
@@ -837,4 +911,35 @@ export function ThreeDeeRender({ context }: { context: PanelExtensionContext }):
       </div>
     </ThemeProvider>
   );
+}
+
+function deepParseMessageEvents(
+  messageEvents: ReadonlyArray<MessageEvent<unknown>> | undefined,
+): void {
+  if (!messageEvents) {
+    return;
+  }
+  for (const messageEvent of messageEvents) {
+    const maybeLazy = messageEvent.message as { toJSON?: () => unknown };
+    if ("toJSON" in maybeLazy) {
+      (messageEvent as { message: unknown }).message = maybeLazy.toJSON!();
+    }
+  }
+}
+
+function areSubscriptionsEqual(
+  a: SubscriptionWithOptions[] | undefined,
+  b: SubscriptionWithOptions[],
+): boolean {
+  if (a == undefined || a.length !== b.length) {
+    return false;
+  }
+  for (let i = 0; i < a.length; i++) {
+    const aI = a[i]!;
+    const bI = b[i]!;
+    if (aI.topic !== bI.topic || aI.preload !== bI.preload || aI.forced !== bI.forced) {
+      return false;
+    }
+  }
+  return true;
 }
