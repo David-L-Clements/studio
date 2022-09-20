@@ -5,6 +5,7 @@
 import { alpha } from "@mui/material";
 import { useCallback, useState } from "react";
 import { makeStyles } from "tss-react/mui";
+import { inManual } from "@foxglove/studio-base/panels/Publish/index"
 
 import Stack from "@foxglove/studio-base/components/Stack";
 

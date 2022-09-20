@@ -19,6 +19,7 @@ import Stack from "@foxglove/studio-base/components/Stack";
 import ThemeProvider from "@foxglove/studio-base/theme/ThemeProvider";
 
 import DirectionalPad, { DirectionalPadAction } from "./DirectionalPad";
+import { inManual } from "@foxglove/studio-base/panels/Publish/index"
 
 type TeleopPanelProps = {
   context: PanelExtensionContext;
@@ -274,7 +275,10 @@ function TeleopPanel(props: TeleopPanelProps): JSX.Element {
 
   const canPublish = context.publish != undefined && config.publishRate > 0;
   const hasTopic = Boolean(currentTopic);
-  const enabled = canPublish && hasTopic;
+  const enabled = !inManual//canPublish && hasTopic;
+
+  console.log("manual test")
+  console.log(inManual)
 
   return (
     <ThemeProvider isDark={colorScheme === "dark"}>
@@ -284,15 +288,7 @@ function TeleopPanel(props: TeleopPanelProps): JSX.Element {
         alignItems="center"
         style={{ padding: "min(5%, 8px)", textAlign: "center" }}
       >
-        {!canPublish && (
-          <EmptyState>
-            Please connect to a datasource that supports publishing in order to use this panel
-          </EmptyState>
-        )}
-        {canPublish && !hasTopic && (
-          <EmptyState>Please select a publish topic in the panel settings</EmptyState>
-        )}
-        {enabled && <DirectionalPad onAction={setCurrentAction} disabled={!enabled} />}
+        {<DirectionalPad onAction={setCurrentAction} disabled={enabled} />}
       </Stack>
     </ThemeProvider>
   );
