@@ -15,12 +15,11 @@ import BorderAllIcon from "@mui/icons-material/BorderAll";
 import DeleteForeverOutlinedIcon from "@mui/icons-material/DeleteForeverOutlined";
 import LibraryAddOutlinedIcon from "@mui/icons-material/LibraryAddOutlined";
 import TabIcon from "@mui/icons-material/Tab";
-import { Button, styled as muiStyled } from "@mui/material";
+import { Button, styled as muiStyled, useTheme } from "@mui/material";
 import { last } from "lodash";
 import React, {
   useState,
   useCallback,
-  useContext,
   useMemo,
   useRef,
   ComponentType,
@@ -29,6 +28,7 @@ import React, {
   useLayoutEffect,
   useEffect,
   CSSProperties,
+  useContext,
 } from "react";
 import {
   MosaicContext,
@@ -45,12 +45,10 @@ import { useMountedState } from "react-use";
 import { useShallowMemo } from "@foxglove/hooks";
 import { useConfigById } from "@foxglove/studio-base/PanelAPI";
 import KeyListener from "@foxglove/studio-base/components/KeyListener";
+import { MosaicPathContext } from "@foxglove/studio-base/components/MosaicPathContext";
 import PanelContext from "@foxglove/studio-base/components/PanelContext";
 import PanelErrorBoundary from "@foxglove/studio-base/components/PanelErrorBoundary";
-import {
-  FULLSCREEN_TRANSITION_DURATION_MS,
-  PanelRoot,
-} from "@foxglove/studio-base/components/PanelRoot";
+import { PanelRoot, PANEL_ROOT_CLASS_NAME } from "@foxglove/studio-base/components/PanelRoot";
 import {
   useCurrentLayoutActions,
   useSelectedPanels,
@@ -86,7 +84,7 @@ const ActionsOverlay = muiStyled("div")(({ theme }) => ({
   visibility: "hidden",
   pointerEvents: "none",
 
-  [`${PanelRoot.toString()}:hover > &`]: {
+  [`.${PANEL_ROOT_CLASS_NAME}:hover > &`]: {
     visibility: "visible",
     pointerEvents: "auto",
   },
@@ -166,7 +164,7 @@ export default function Panel<
 ): ComponentType<Props<Config> & Omit<PanelProps, "config" | "saveConfig">> & PanelStatics<Config> {
   function ConnectedPanel(props: Props<Config>) {
     const { childId, overrideConfig, tabId, ...otherProps } = props;
-
+    const theme = useTheme();
     const isMounted = useMountedState();
 
     const { mosaicActions } = useContext(MosaicContext);
@@ -206,7 +204,10 @@ export default function Panel<
     const [hasFullscreenDescendant, _setHasFullscreenDescendant] = useState(false);
     const panelRootRef = useRef<HTMLDivElement>(ReactNull);
     const panelCatalog = usePanelCatalog();
-    const isTopLevelPanel = mosaicWindowActions.getPath().length === 0 && tabId == undefined;
+
+    const mosaicPath = useContext(MosaicPathContext);
+    const isTopLevelPanel =
+      mosaicPath != undefined && mosaicPath.length === 0 && tabId == undefined;
 
     // There may be a parent panel (when a panel is in a tab).
     const parentPanelContext = useContext(PanelContext);
@@ -557,9 +558,12 @@ export default function Panel<
           {fullscreen && <KeyListener global keyDownHandlers={fullScreenKeyHandlers} />}
           <Transition
             in={fullscreen}
-            timeout={{ exit: FULLSCREEN_TRANSITION_DURATION_MS }}
             onExited={() => setHasFullscreenDescendant(false)}
             nodeRef={panelRootRef}
+            timeout={{
+              // match to transition duration inside PanelRoot
+              exit: theme.transitions.duration.shorter,
+            }}
           >
             {(fullscreenState) => (
               <PanelRoot

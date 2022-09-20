@@ -113,7 +113,16 @@ export default class Ros1Player implements Player {
       return await net.createSocket(options.host, options.port);
     };
     const tcpServer = await net.createServer();
-    await tcpServer.listen(undefined, hostname, 10);
+
+    // Mirror the ros_comm c++ library behavior when setting up the tcp server listener.
+    // ros_comm listens on all interfaces unless the hostname is explicity set to 'localhost'
+    // https://github.com/ros/ros_comm/blob/noetic-devel/clients/roscpp/src/libros/transport/transport_tcp.cpp#L393-L395
+    // https://github.com/ros/ros_comm/blob/f5fa3a168760d62e9693f10dcb9adfffc6132d22/clients/roscpp/src/libros/transport/transport.cpp#L67-L72
+    let listenHostname = undefined;
+    if (hostname === "localhost") {
+      listenHostname = "localhost";
+    }
+    await tcpServer.listen(undefined, listenHostname, 10);
 
     if (this._rosNode == undefined) {
       const rosNode = new RosNode({
@@ -567,9 +576,6 @@ export default class Ros1Player implements Player {
   }
 
   // Bunch of unsupported stuff. Just don't do anything for these.
-  public requestBackfill(): void {
-    // no-op
-  }
   public setGlobalVariables(): void {
     // no-op
   }

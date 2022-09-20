@@ -4,6 +4,8 @@
 
 import * as base64 from "@protobufjs/base64";
 
+import { add, fromNanoSec, Time, toSec } from "@foxglove/rostime";
+
 type User = {
   id: string;
   email: string;
@@ -49,6 +51,22 @@ type ExtensionResponse = {
   sha256Sum?: string;
 };
 
+export type ConsoleEvent = {
+  id: string;
+  createdAt: string;
+  deviceId: string;
+  durationNanos: string;
+  endTime: Time;
+  endTimeInSeconds: number;
+  metadata: Record<string, string>;
+  startTime: Time;
+  startTimeInSeconds: number;
+  timestampNanos: string;
+  updatedAt: string;
+};
+
+type EventsResponse = ConsoleEvent[];
+
 type TokenArgs = {
   deviceCode: string;
   clientId: string;
@@ -73,6 +91,11 @@ type CoverageResponse = {
   deviceId: string;
   start: string;
   end: string;
+};
+
+type DeviceResponse = {
+  id: string;
+  name: string;
 };
 
 export type LayoutID = string & { __brand: "LayoutID" };
@@ -151,6 +174,39 @@ class ConsoleApi {
 
   public async getExtension(id: string): Promise<ExtensionResponse> {
     return await this.get<ExtensionResponse>(`/v1/extensions/${id}`);
+  }
+
+  public async getDevice(id: string): Promise<DeviceResponse> {
+    return await this.get<DeviceResponse>(`/v1/devices/${id}`);
+  }
+
+  public async createEvent(params: {
+    deviceId: string;
+    timestamp: string;
+    durationNanos: string;
+    metadata: Record<string, string>;
+  }): Promise<ConsoleEvent> {
+    const rawEvent = await this.post<ConsoleEvent>(`/beta/device-events`, params);
+    return rawEvent;
+  }
+
+  public async getEvents(params: {
+    deviceId: string;
+    start: string;
+    end: string;
+  }): Promise<EventsResponse> {
+    const rawEvents = await this.get<EventsResponse>(`/beta/device-events`, params);
+    return rawEvents.map((event) => {
+      const startTime = fromNanoSec(BigInt(event.timestampNanos));
+      const endTime = add(startTime, fromNanoSec(BigInt(event.durationNanos)));
+      return {
+        ...event,
+        endTime,
+        endTimeInSeconds: toSec(endTime),
+        startTime,
+        startTimeInSeconds: toSec(startTime),
+      };
+    });
   }
 
   public async getLayouts(options: { includeData: boolean }): Promise<readonly ConsoleApiLayout[]> {
@@ -327,5 +383,5 @@ class ConsoleApi {
   }
 }
 
-export type { Org, DeviceCodeResponse, Session };
+export type { Org, DeviceCodeResponse, Session, CoverageResponse };
 export default ConsoleApi;

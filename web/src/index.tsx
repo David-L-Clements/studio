@@ -82,19 +82,15 @@ async function main() {
 
   const appConfiguration = new LocalStorageAppConfiguration({
     defaults: {
-      [AppSetting.ENABLE_REACT_STRICT_MODE]: isDevelopment,
+      [AppSetting.SHOW_DEBUG_PANELS]: isDevelopment,
     },
   });
-  const enableStrictMode = appConfiguration.get(AppSetting.ENABLE_REACT_STRICT_MODE) as boolean;
 
-  const root = (
-    <>
+  ReactDOM.render(
+    <StrictMode>
       {banner}
       <Root appConfiguration={appConfiguration} />
-    </>
-  );
-  ReactDOM.render(
-    enableStrictMode ? <StrictMode>{root}</StrictMode> : root,
+    </StrictMode>,
     rootEl,
     renderCallback,
   );

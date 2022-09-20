@@ -106,7 +106,6 @@ describe("MessagePipelineProvider/useMessagePipeline", () => {
         seekPlayback: undefined,
         setParameter: expect.any(Function),
         pauseFrame: expect.any(Function),
-        requestBackfill: expect.any(Function),
       },
     ]);
   });
@@ -135,6 +134,133 @@ describe("MessagePipelineProvider/useMessagePipeline", () => {
           playerId: "test",
           progress: {},
         },
+      }),
+    ]);
+  });
+
+  it("updates datatypes when player datatypes change", async () => {
+    const player = new FakePlayer();
+    const { Hook, Wrapper, all } = makeTestHook({ player });
+    renderHook(Hook, { wrapper: Wrapper });
+
+    await doubleAct(
+      async () =>
+        await player.emit({
+          activeData: {
+            messages: [],
+            totalBytesReceived: 0,
+            currentTime: { sec: 0, nsec: 0 },
+            startTime: { sec: 0, nsec: 0 },
+            endTime: { sec: 0, nsec: 0 },
+            isPlaying: false,
+            speed: 1,
+            lastSeekTime: 0,
+            topics: [],
+            topicStats: new Map(),
+            datatypes: new Map([["Foo", { definitions: [] }]]),
+          },
+        }),
+    );
+    await doubleAct(
+      async () =>
+        await player.emit({
+          activeData: {
+            messages: [],
+            totalBytesReceived: 0,
+            currentTime: { sec: 0, nsec: 0 },
+            startTime: { sec: 0, nsec: 0 },
+            endTime: { sec: 0, nsec: 0 },
+            isPlaying: false,
+            speed: 1,
+            lastSeekTime: 0,
+            topics: [],
+            topicStats: new Map(),
+            datatypes: new Map([
+              ["Foo", { definitions: [] }],
+              ["Bar", { definitions: [] }],
+            ]),
+          },
+        }),
+    );
+    expect(all.length).toBe(3);
+    expect(all[0]!.playerState).toEqual({
+      activeData: undefined,
+      capabilities: [],
+      presence: PlayerPresence.NOT_PRESENT,
+      playerId: "",
+      progress: {},
+    });
+    expect(all[1]!.datatypes).toEqual(new Map([["Foo", { definitions: [] }]]));
+    expect(all[2]!.datatypes).toEqual(
+      new Map([
+        ["Foo", { definitions: [] }],
+        ["Bar", { definitions: [] }],
+      ]),
+    );
+  });
+
+  it("updates sortedTopics when player topics change", async () => {
+    const player = new FakePlayer();
+    const { Hook, Wrapper, all } = makeTestHook({ player });
+    renderHook(Hook, { wrapper: Wrapper });
+
+    await doubleAct(
+      async () =>
+        await player.emit({
+          activeData: {
+            messages: [],
+            totalBytesReceived: 0,
+            currentTime: { sec: 0, nsec: 0 },
+            startTime: { sec: 0, nsec: 0 },
+            endTime: { sec: 0, nsec: 0 },
+            isPlaying: false,
+            speed: 1,
+            lastSeekTime: 0,
+            topics: [{ name: "foo", datatype: "Foo" }],
+            topicStats: new Map(),
+            datatypes: new Map(),
+          },
+        }),
+    );
+    await doubleAct(
+      async () =>
+        await player.emit({
+          activeData: {
+            messages: [],
+            totalBytesReceived: 0,
+            currentTime: { sec: 0, nsec: 0 },
+            startTime: { sec: 0, nsec: 0 },
+            endTime: { sec: 0, nsec: 0 },
+            isPlaying: false,
+            speed: 1,
+            lastSeekTime: 0,
+            topics: [
+              { name: "foo", datatype: "Foo" },
+              { name: "bar", datatype: "Bar" },
+            ],
+            topicStats: new Map(),
+            datatypes: new Map(),
+          },
+        }),
+    );
+    expect(all).toEqual([
+      expect.objectContaining({
+        playerState: {
+          activeData: undefined,
+          capabilities: [],
+          presence: PlayerPresence.NOT_PRESENT,
+          playerId: "",
+          progress: {},
+        },
+      }),
+      expect.objectContaining({
+        sortedTopics: [{ name: "foo", datatype: "Foo" }],
+      }),
+      expect.objectContaining({
+        sortedTopics: [
+          { name: "bar", datatype: "Bar" },
+          { name: "foo", datatype: "Foo" },
+        ],
       }),
     ]);
   });
@@ -428,6 +554,7 @@ describe("MessagePipelineProvider/useMessagePipeline", () => {
     const player2 = new FakePlayer();
     setPlayer(player2);
     rerender();
+    await act(async () => await delay(1));
     expect(player2.subscriptions).toEqual([{ topic: "/studio/test" }, { topic: "/studio/test2" }]);
     expect(player2.publishers).toEqual([{ topic: "/studio/test", datatype: "test" }]);
   });

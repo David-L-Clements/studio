@@ -16,6 +16,7 @@ import {
   fromMillis,
   fromNanoSec,
   toString,
+  toRFC3339String,
 } from "@foxglove/rostime";
 import { MessageEvent, ParameterValue } from "@foxglove/studio";
 import NoopMetricsCollector from "@foxglove/studio-base/players/NoopMetricsCollector";
@@ -101,7 +102,6 @@ type IterablePlayerState =
 export class IterablePlayer implements Player {
   private _urlParams?: Record<string, string>;
   private _name?: string;
-  private _filePath?: string;
   private _nextState?: IterablePlayerState;
   private _state: IterablePlayerState = "preinit";
   private _runningState: boolean = false;
@@ -162,7 +162,7 @@ export class IterablePlayer implements Player {
   private _blockLoader?: BlockLoader;
   private _blockLoadingProcess?: Promise<void>;
 
-  private _emitState: ReturnType<typeof debouncePromise>;
+  private _queueEmitState: ReturnType<typeof debouncePromise>;
 
   private readonly _sourceId: string;
 
@@ -182,7 +182,7 @@ export class IterablePlayer implements Player {
 
     // Wrap emitStateImpl in a debouncePromise for our states to call. Since we can emit from states
     // or from block loading updates we use debouncePromise to guard against concurrent emits.
-    this._emitState = debouncePromise(this._emitStateImpl.bind(this));
+    this._queueEmitState = debouncePromise(this._emitStateImpl.bind(this));
   }
 
   public setListener(listener: (playerState: PlayerState) => Promise<void>): void {
@@ -241,11 +241,8 @@ export class IterablePlayer implements Player {
     this._speed = speed;
     this._metricsCollector.setSpeed(speed);
 
-    // If we are idling then we might not emit any new state so we use a state change to idle state
-    // to trigger an emit so listeners get updated with the new speed setting.
-    if (this._state === "idle") {
-      this._setState("idle");
-    }
+    // Queue event state update to update speed in player state to UI
+    this._queueEmitState();
   }
 
   public seekPlayback(time: Time): void {
@@ -257,6 +254,16 @@ export class IterablePlayer implements Player {
 
     // Limit seek to within the valid range
     const targetTime = clampTime(time, this._start, this._end);
+
+    // We are already seeking to this time, no need to reset seeking
+    if (this._seekTarget && compare(this._seekTarget, targetTime) === 0) {
+      return;
+    }
+
+    // We are already at this time, no need to reset seeking
+    if (this._currentTime && compare(this._currentTime, targetTime) === 0) {
+      return;
+    }
 
     this._metricsCollector.seek(targetTime);
     this._seekTarget = targetTime;
@@ -278,6 +285,7 @@ export class IterablePlayer implements Player {
       ),
     );
 
+    // If there are no changes to topics there's no reason to perform a "seek" to trigger loading
     if (isEqual(allTopics, this._allTopics) && isEqual(partialTopics, this._partialTopics)) {
       return;
     }
@@ -285,22 +293,17 @@ export class IterablePlayer implements Player {
     this._allTopics = allTopics;
     this._partialTopics = partialTopics;
     this._blockLoader?.setTopics(this._partialTopics);
-  }
 
-  public requestBackfill(): void {
-    // The message pipeline invokes requestBackfill after setting subscriptions. It does this so any
-    // new panels that subscribe receive their messages even if the topic was already subscribed.
-    //
-    // Note(Roman): This behavior was designed around RandomAccessPlayer (I think) which does not do
-    // anything in setSubscriptions other than update internal members. While we still have
-    // RandomAccessPlayer we mimick that behavior in this player. Eventually we can update
-    // MessagePipeline to remove requestBackfill.
-    //
-    // We only seek playback if the player is not playing. If the player is playing, the
-    // playing state will detect any subscription changes and emit new messages.
+    // If the player is playing, the playing state will detect any subscription changes and adjust
+    // iterators accordignly. However if we are idle or already seeking then we need to manually
+    // trigger the backfill.
     if (this._state === "idle" || this._state === "seek-backfill" || this._state === "play") {
       if (!this._isPlaying && this._currentTime) {
-        this.seekPlayback(this._currentTime);
+        this._seekTarget = this._currentTime;
+        this._untilTime = undefined;
+
+        // Trigger a seek backfill to load any missing messages and reset the forward iterator
+        this._setState("seek-backfill");
       }
     }
   }
@@ -369,7 +372,7 @@ export class IterablePlayer implements Player {
 
         switch (state) {
           case "preinit":
-            this._emitState();
+            this._queueEmitState();
             break;
           case "initialize":
             await this._stateInitialize();
@@ -399,7 +402,7 @@ export class IterablePlayer implements Player {
     } catch (err) {
       log.error(err);
       this._setError((err as Error).message, err);
-      this._emitState();
+      this._queueEmitState();
     } finally {
       this._runningState = false;
     }
@@ -418,17 +421,27 @@ export class IterablePlayer implements Player {
   // Initialize the source and player members
   private async _stateInitialize(): Promise<void> {
     // emit state indicating start of initialization
-    this._emitState();
+    this._queueEmitState();
 
     try {
-      const { start, end, topics, profile, topicStats, problems, publishersByTopic, datatypes } =
-        await this._bufferedSource.initialize();
+      const {
+        start,
+        end,
+        topics,
+        profile,
+        topicStats,
+        problems,
+        publishersByTopic,
+        datatypes,
+        name,
+      } = await this._bufferedSource.initialize();
 
       this._profile = profile;
       this._start = this._currentTime = start;
       this._end = end;
       this._publishedTopics = publishersByTopic;
       this._providerDatatypes = datatypes;
+      this._name = name ?? this._name;
 
       // Studio does not like duplicate topics or topics with different datatypes
       // Check for duplicates or for mismatched datatypes
@@ -456,23 +469,37 @@ export class IterablePlayer implements Player {
       }
 
       if (this._enablePreload) {
-        // --- setup blocks
-        this._blockLoader = new BlockLoader({
-          cacheSizeBytes: DEFAULT_CACHE_SIZE_BYTES,
-          source: this._iterableSource,
-          start: this._start,
-          end: this._end,
-          maxBlocks: MAX_BLOCKS,
-          minBlockDurationNs: MIN_MEM_CACHE_BLOCK_SIZE_NS,
-          problemManager: this._problemManager,
-        });
+        // --- setup block loader which loads messages for _full_ subscriptions in the "background"
+        try {
+          this._blockLoader = new BlockLoader({
+            cacheSizeBytes: DEFAULT_CACHE_SIZE_BYTES,
+            source: this._iterableSource,
+            start: this._start,
+            end: this._end,
+            maxBlocks: MAX_BLOCKS,
+            minBlockDurationNs: MIN_MEM_CACHE_BLOCK_SIZE_NS,
+            problemManager: this._problemManager,
+          });
+        } catch (err) {
+          log.error(err);
+
+          const startStr = toRFC3339String(this._start);
+          const endStr = toRFC3339String(this._end);
+
+          this._problemManager.addProblem("block-loader", {
+            severity: "warn",
+            message: "Failed to initialize message preloading",
+            tip: `The start (${startStr}) and end (${endStr}) of your data is too far apart.`,
+            error: err,
+          });
+        }
       }
 
       // set the initial topics for the loader
     } catch (error) {
       this._setError(`Error initializing: ${error.message}`, error);
     }
-    this._emitState();
+    this._queueEmitState();
 
     if (!this._hasError) {
       // Wait a bit until panels have had the chance to subscribe to topics before we start
@@ -504,6 +531,7 @@ export class IterablePlayer implements Player {
     this._playbackIterator = this._bufferedSource.messageIterator({
       topics: Array.from(this._allTopics),
       start: next,
+      consumptionType: "partial",
     });
   }
 
@@ -536,6 +564,7 @@ export class IterablePlayer implements Player {
     this._playbackIterator = this._bufferedSource.messageIterator({
       topics: Array.from(this._allTopics),
       start: this._start,
+      consumptionType: "partial",
     });
 
     this._lastMessage = undefined;
@@ -547,7 +576,7 @@ export class IterablePlayer implements Player {
     // indicates that the player is waiting to load more data.
     const tickTimeout = setTimeout(() => {
       this._presence = PlayerPresence.BUFFERING;
-      this._emitState();
+      this._queueEmitState();
     }, 100);
 
     try {
@@ -582,7 +611,7 @@ export class IterablePlayer implements Player {
     this._currentTime = stopTime;
     this._messages = messageEvents;
     this._presence = PlayerPresence.PRESENT;
-    this._emitState();
+    this._queueEmitState();
     this._setState("idle");
   }
 
@@ -595,7 +624,6 @@ export class IterablePlayer implements Player {
     }
 
     this._lastMessage = undefined;
-    this._seekTarget = undefined;
 
     // If the backfill does not complete within 100 milliseconds, we emit a seek event with no messages.
     // This provides feedback to the user that we've acknowledged their seek request but haven't loaded the data.
@@ -604,7 +632,7 @@ export class IterablePlayer implements Player {
       this._messages = [];
       this._currentTime = targetTime;
       this._lastSeekEmitTime = Date.now();
-      this._emitState();
+      this._queueEmitState();
     }, 100);
 
     const topics = Array.from(this._allTopics);
@@ -616,7 +644,21 @@ export class IterablePlayer implements Player {
         time: targetTime,
         abortSignal: this._abort.signal,
       });
+
+      // We've successfully loaded the messages and will emit those, no longer need the ackTimeout
+      clearTimeout(seekAckTimeout);
+
+      if (this._nextState) {
+        return;
+      }
+
       this._messages = messages;
+      this._currentTime = targetTime;
+      this._lastSeekEmitTime = Date.now();
+      this._presence = PlayerPresence.PRESENT;
+      this._queueEmitState();
+      await this.resetPlaybackIterator();
+      this._setState(this._isPlaying ? "play" : "idle");
     } catch (err) {
       if (this._nextState && err instanceof DOMException && err.name === "AbortError") {
         log.debug("Aborted backfill");
@@ -624,22 +666,13 @@ export class IterablePlayer implements Player {
         throw err;
       }
     } finally {
+      // Unless the next state is a seek backfill, we clear the seek target since we have finished seeking
+      if (this._nextState !== "seek-backfill") {
+        this._seekTarget = undefined;
+      }
+      clearTimeout(seekAckTimeout);
       this._abort = undefined;
     }
-
-    // We've successfully loaded the messages and will emit those, no longer need the ackTimeout
-    clearTimeout(seekAckTimeout);
-
-    if (this._nextState) {
-      return;
-    }
-
-    this._currentTime = targetTime;
-    this._lastSeekEmitTime = Date.now();
-    this._presence = PlayerPresence.PRESENT;
-    this._emitState();
-    await this.resetPlaybackIterator();
-    this._setState(this._isPlaying ? "play" : "idle");
   }
 
   /** Emit the player state to the registered listener */
@@ -651,7 +684,6 @@ export class IterablePlayer implements Player {
     if (this._hasError) {
       return await this._listener({
         name: this._name,
-        filePath: this._filePath,
         presence: PlayerPresence.ERROR,
         progress: {},
         capabilities: this._capabilities,
@@ -676,7 +708,6 @@ export class IterablePlayer implements Player {
 
     const data: PlayerState = {
       name: this._name,
-      filePath: this._filePath,
       presence: this._presence,
       progress: this._progress,
       capabilities: this._capabilities,
@@ -749,11 +780,11 @@ export class IterablePlayer implements Player {
       // If the last message we saw is still ahead of the tick end time, we don't emit anything
       if (compare(this._lastMessage.receiveTime, end) > 0) {
         // Wait for the previous render frame to finish
-        await this._emitState.currentPromise;
+        await this._queueEmitState.currentPromise;
 
         this._currentTime = end;
         this._messages = msgEvents;
-        this._emitState();
+        this._queueEmitState();
 
         if (this._untilTime && compare(this._currentTime, this._untilTime) >= 0) {
           this.pausePlayback();
@@ -770,14 +801,14 @@ export class IterablePlayer implements Player {
     // clear this timeout.
     const tickTimeout = setTimeout(() => {
       this._presence = PlayerPresence.BUFFERING;
-      this._emitState();
+      this._queueEmitState();
     }, 500);
 
     try {
       // Read from the iterator through the end of the tick time
       for (;;) {
         if (!this._playbackIterator) {
-          break;
+          throw new Error("Invariant. this._playbackIterator is undefined.");
         }
 
         const result = await this._playbackIterator.next();
@@ -815,11 +846,11 @@ export class IterablePlayer implements Player {
     // Wait on any active emit state to finish as part of this tick
     // Without waiting on the emit state to finish we might drop messages since our emitState
     // might get debounced
-    await this._emitState.currentPromise;
+    await this._queueEmitState.currentPromise;
 
     this._currentTime = end;
     this._messages = msgEvents;
-    this._emitState();
+    this._queueEmitState();
 
     // This tick has reached the end of the untilTime so we go back to pause
     if (this._untilTime && compare(this._currentTime, this._untilTime) >= 0) {
@@ -830,7 +861,7 @@ export class IterablePlayer implements Player {
   private async _stateIdle() {
     this._isPlaying = false;
     this._presence = PlayerPresence.PRESENT;
-    this._emitState();
+    this._queueEmitState();
 
     if (this._abort) {
       throw new Error("Invariant: some other abort controller exists");
@@ -848,7 +879,7 @@ export class IterablePlayer implements Player {
         fullyLoadedFractionRanges: this._bufferedSource.loadedRanges(),
         messageCache: this._progress.messageCache,
       };
-      this._emitState();
+      this._queueEmitState();
 
       // When idling nothing is querying the source, but our buffered source might be
       // buffering behind the scenes. Every second we emit state with an update to show that
@@ -911,7 +942,7 @@ export class IterablePlayer implements Player {
       }
     } catch (err) {
       this._setError((err as Error).message, err);
-      this._emitState();
+      this._queueEmitState();
     }
   }
 
@@ -933,7 +964,7 @@ export class IterablePlayer implements Player {
           messageCache: progress.messageCache,
         };
 
-        this._emitState();
+        this._queueEmitState();
       },
     });
   }

@@ -11,7 +11,7 @@
 //   found at http://www.apache.org/licenses/LICENSE-2.0
 //   You may not use this file except in compliance with the License.
 
-import { Checkbox, FormControlLabel, Link, Typography } from "@mui/material";
+import { Checkbox, FormControlLabel, Typography } from "@mui/material";
 import { makeStyles } from "tss-react/mui";
 
 import { AppSetting } from "@foxglove/studio-base/AppSetting";
@@ -53,25 +53,17 @@ const features: Feature[] = [
     name: "Memory use indicator",
     description: <>Show the app memory use in the sidebar.</>,
   },
+  {
+    key: AppSetting.ENABLE_PLOT_PANEL_SERIES_SETTINGS,
+    name: "Plot panel series in settings",
+    description: <>Allow editing plot panel data series in the sidebar.</>,
+  },
 ];
 if (process.env.NODE_ENV === "development") {
   features.push({
     key: AppSetting.ENABLE_LAYOUT_DEBUGGING,
     name: "Layout debugging",
     description: <>Show extra controls for developing and debugging layout storage.</>,
-  });
-  features.push({
-    key: AppSetting.ENABLE_REACT_STRICT_MODE,
-    name: "React Strict Mode",
-    description: (
-      <>
-        Enable React{" "}
-        <Link href="https://reactjs.org/docs/strict-mode.html" target="_blank" rel="noreferrer">
-          Strict Mode
-        </Link>
-        . Changing this setting requires a restart.
-      </>
-    ),
   });
 }
 

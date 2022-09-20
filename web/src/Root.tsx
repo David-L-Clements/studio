@@ -28,27 +28,25 @@ import VelodyneUnavailableDataSourceFactory from "./dataSources/VelodyneUnavaila
 import { IdbLayoutStorage } from "./services/IdbLayoutStorage";
 
 export function Root({ appConfiguration }: { appConfiguration: IAppConfiguration }): JSX.Element {
-  const enableExperimentalLatching = true;
-
   const dataSources: IDataSourceFactory[] = useMemo(() => {
     const sources = [
       new Ros1UnavailableDataSourceFactory(),
-      new Ros1LocalBagDataSourceFactory({ useIterablePlayer: enableExperimentalLatching }),
-      new Ros1RemoteBagDataSourceFactory({ useIterablePlayer: enableExperimentalLatching }),
+      new Ros1LocalBagDataSourceFactory(),
+      new Ros1RemoteBagDataSourceFactory(),
       new Ros2UnavailableDataSourceFactory(),
-      new Ros2LocalBagDataSourceFactory({ useIterablePlayer: enableExperimentalLatching }),
+      new Ros2LocalBagDataSourceFactory(),
       new RosbridgeDataSourceFactory(),
       new FoxgloveWebSocketDataSourceFactory(),
       new UlogLocalDataSourceFactory(),
       new VelodyneUnavailableDataSourceFactory(),
       new FoxgloveDataPlatformDataSourceFactory(),
       new SampleNuscenesDataSourceFactory(),
-      new McapLocalDataSourceFactory({ useIterablePlayer: enableExperimentalLatching }),
-      new McapRemoteDataSourceFactory({ useIterablePlayer: enableExperimentalLatching }),
+      new McapLocalDataSourceFactory(),
+      new McapRemoteDataSourceFactory(),
     ];
 
     return sources;
-  }, [enableExperimentalLatching]);
+  }, []);
 
   const layoutStorage = useMemo(() => new IdbLayoutStorage(), []);
   const [extensionLoaders] = useState(() => [
@@ -59,7 +57,8 @@ export function Root({ appConfiguration }: { appConfiguration: IAppConfiguration
 
   // Enable dialog auth in development since using cookie auth does not work between
   // localhost and the hosted dev deployment due to browser cookie/host security.
-  const enableDialogAuth = process.env.NODE_ENV === "development";
+  const enableDialogAuth =
+    process.env.NODE_ENV === "development" || process.env.FOXGLOVE_ENABLE_DIALOG_AUTH != undefined;
 
   return (
     <App

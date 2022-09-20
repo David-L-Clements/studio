@@ -4,10 +4,17 @@
 
 import { useMemo, useState } from "react";
 
-import { App, IDataSourceFactory, ConsoleApi, AppSetting } from "@foxglove/studio-base";
+import {
+  App,
+  IDataSourceFactory,
+  ConsoleApi,
+  AppSetting,
+  LaunchPreferenceValue,
+} from "@foxglove/studio-base";
 
 import { McapLocalBenchmarkDataSourceFactory, SyntheticDataSourceFactory } from "./dataSources";
 import { LAYOUTS } from "./layouts";
+import { PointcloudPlayer, SinewavePlayer } from "./players";
 import { PredefinedLayoutStorage, MemoryAppConfiguration } from "./services";
 
 export function Root(): JSX.Element {
@@ -15,14 +22,18 @@ export function Root(): JSX.Element {
     () =>
       new MemoryAppConfiguration({
         defaults: {
-          [AppSetting.LAUNCH_PREFERENCE]: "web",
+          [AppSetting.LAUNCH_PREFERENCE]: LaunchPreferenceValue.WEB,
           [AppSetting.MESSAGE_RATE]: 240,
         },
       }),
   );
 
   const dataSources: IDataSourceFactory[] = useMemo(() => {
-    const sources = [new McapLocalBenchmarkDataSourceFactory(), new SyntheticDataSourceFactory()];
+    const sources = [
+      new McapLocalBenchmarkDataSourceFactory(),
+      new SyntheticDataSourceFactory("pointcloud", PointcloudPlayer),
+      new SyntheticDataSourceFactory("sinewave", SinewavePlayer),
+    ];
 
     return sources;
   }, []);
