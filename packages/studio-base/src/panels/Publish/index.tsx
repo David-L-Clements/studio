@@ -1,6 +1,11 @@
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/
+
+/* eslint-disable no-restricted-syntax */
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/
 //
 // This file incorporates work covered by the following copyright and
 // permission notice:
@@ -11,7 +16,10 @@
 //   found at http://www.apache.org/licenses/LICENSE-2.0
 //   You may not use this file except in compliance with the License.
 
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { Button, Typography, styled as muiStyled, OutlinedInput } from "@mui/material";
+import { IconButton, TextFieldProps, TextField, styled as muiStyled } from "@mui/material";
 import produce from "immer";
 import { set } from "lodash";
 import { useCallback, useEffect, useMemo, useRef } from "react";
@@ -22,27 +30,23 @@ import { useDataSourceInfo } from "@foxglove/studio-base/PanelAPI";
 import Autocomplete, { IAutocomplete } from "@foxglove/studio-base/components/Autocomplete";
 import Panel from "@foxglove/studio-base/components/Panel";
 import PanelToolbar from "@foxglove/studio-base/components/PanelToolbar";
+import { NumberInput } from "@foxglove/studio-base/components/SettingsTreeEditor/inputs";
 import Stack from "@foxglove/studio-base/components/Stack";
 import usePublisher from "@foxglove/studio-base/hooks/usePublisher";
+import TeleopPanel from "@foxglove/studio-base/panels/Teleop/TeleopPanel";
 import { PlayerCapabilities, Topic } from "@foxglove/studio-base/players/types";
 import { usePanelSettingsTreeUpdate } from "@foxglove/studio-base/providers/PanelSettingsEditorContextProvider";
 import { SaveConfig } from "@foxglove/studio-base/types/panels";
 import { fonts } from "@foxglove/studio-base/util/sharedStyleConstants";
-import { NumberInput } from "@foxglove/studio-base/components/SettingsTreeEditor/inputs";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-
 
 // my added imports
-import TeleopPanel from "@foxglove/studio-base/panels/Teleop/TeleopPanel";
-import { IconButton, TextFieldProps, TextField, styled as muiStyled } from "@mui/material";
-//import croprows from './crop_rows.png';
-import croprowalt from './crop_row_image_reflected.png'
 
+//import croprows from './crop_rows.png';
+import buildSampleMessage from "./buildSampleMessage";
+import croprowalt from "./crop_row_image_reflected.png";
 
 //
 
-import buildSampleMessage from "./buildSampleMessage";
 import helpContent from "./index.help.md";
 
 type Config = Partial<{
@@ -115,6 +119,11 @@ const StyledTextarea = muiStyled(OutlinedInput)(({ theme }) => ({
   },
 }));
 
+const testTopPub = {
+  command: 5,
+  row: "row 1",
+};
+
 function getTopicName(topic: Topic): string {
   return topic.name;
 }
@@ -126,7 +135,7 @@ function parseInput(value: string): { error?: string; parsedObject?: unknown } {
     const parsedAny: unknown = JSON.parse(value);
     if (Array.isArray(parsedAny)) {
       error = "Message content must be an object, not an array";
-    } else if (parsedAny == null /* eslint-disable-line no-restricted-syntax */) {
+    } else if (parsedAny == null) {
       error = "Message content must be an object, not null";
     } else if (typeof parsedAny !== "object") {
       error = `Message content must be an object, not ‘${typeof parsedAny}’`;
@@ -139,10 +148,9 @@ function parseInput(value: string): { error?: string; parsedObject?: unknown } {
   return { error, parsedObject };
 }
 
-
-function changeMode(){
-  inManual = !inManual
-  console.log(inManual)
+function changeMode() {
+  inManual = !inManual;
+  console.log(inManual);
 }
 
 /*
@@ -165,6 +173,10 @@ function Publish(props: Props) {
     },
     saveConfig,
   } = props;
+
+  const mydatatype = "row_info/Croprow";
+  const mydatatypes = "";
+  const mytopicName = "/crop_rows";
 
   const publish = usePublisher({ name: "Publish", topic: topicName, datatype, datatypes });
 
@@ -240,12 +252,16 @@ function Publish(props: Props) {
 
   const onPublishClicked = useRethrow(
     useCallback(() => {
-      if (topicName.length !== 0 && parsedObject != undefined) {
-        publish(parsedObject as Record<string, unknown>);
+      if (topicName.length !== 0 && testTopPub != undefined) {
+        publish(testTopPub as Record<string, unknown>);
       } else {
         throw new Error(`called _publish() when input was invalid`);
       }
-    }, [publish, parsedObject, topicName]),
+      console.log("datatype");
+      console.log(datatype);
+      console.log("datatypes");
+      console.log(datatypes);
+    }, [publish, testTopPub, topicName]),
   );
 
   const onOperationModeClicked = useRethrow(
@@ -254,20 +270,39 @@ function Publish(props: Props) {
     }, [changeMode]),
   );
 
+  const rowTestPublish = useRethrow(
+    useCallback(() => {
+      if (topicName.length !== 0 && parsedObject != undefined) {
+        publish(parsedObject as Record<string, unknown>);
+      } else {
+        throw new Error(`called _publish() when input was invalid`);
+      }
+    }, [publish, parsedObject, topicName]),
+  );
+
   const canPublish = capabilities.includes(PlayerCapabilities.advertise);
 
   return (
-    <div id="container" style = {
-      {
+    <div
+      id="container"
+      style={{
         backgroundImage: `url(${croprowalt})`,
         height: "700px",
         width: "1500px",
-      }}>
+      }}
+    >
+      <div>
+        <Button onClick={onPublishClicked}></Button>
+        <StyledButton
+          // Operation Mode //
+          variant="contained"
+          size="large"
+          //buttonText = "other test 0"
+          buttonColor={buttonColor ? buttonColor : undefined}
+          title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
+          onClick={onPublishClicked}
+        ></StyledButton>
 
-      <div>
-        <Button>
-        </Button>
-
         <Button></Button>
       </div>
       <div>
@@ -278,7 +313,7 @@ function Publish(props: Props) {
         <Button></Button>
         <Button></Button>
       </div>
-      </div>
+    </div>
 
     //   <Stack flex-direction="row" >
     //     <Stack direction="row">
@@ -298,14 +333,13 @@ function Publish(props: Props) {
     //     </Stack>
     //   </Stack>
 
-
     // </div>
     /*
     <Stack fullHeight>
       <PanelToolbar helpContent={helpContent} />
       {advancedView && (
         <Stack flex="auto" padding={10} gap={2} paddingBottom={0}>
-          <div style = {{backgroundImage: "url(" + "C:/Users/mrdav/Desktop" + ")"}}>
+          <div style={{ backgroundImage: "url(" + "C:/Users/mrdav/Desktop" + ")" }}>
             <Stack alignItems="baseline" gap={1} padding={0.5} direction="row" flexShrink={0}>
               <Typography color="text.secondary" variant="body2" component="label">
                 Topic:
@@ -335,7 +369,7 @@ function Publish(props: Props) {
             </Stack>
           </div>
 
-            <StyledButton
+          <StyledButton
             // Operation Mode //
             variant="contained"
             size="large"
@@ -344,9 +378,7 @@ function Publish(props: Props) {
             title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
             //disabled={!canPublish || parsedObject == undefined}
             onClick={onOperationModeClicked}
-          >
-
-          </StyledButton>
+          ></StyledButton>
           <StyledButton
             //buttonText = "other test 1"
 
@@ -356,8 +388,7 @@ function Publish(props: Props) {
             title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
             disabled={!canPublish || parsedObject == undefined}
             onClick={onPublishClicked}
-          >
-          </StyledButton>
+          ></StyledButton>
           <StyledButton
             //buttonText = "other test 2"
             variant="contained"
@@ -366,9 +397,7 @@ function Publish(props: Props) {
             title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
             disabled={!canPublish || parsedObject == undefined}
             onClick={onPublishClicked}
-          >
-
-          </StyledButton>
+          ></StyledButton>
           <StyledButton
             //buttonText = "other test 3"
             variant="contained"
@@ -377,65 +406,55 @@ function Publish(props: Props) {
             title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
             disabled={!canPublish || parsedObject == undefined}
             onClick={onPublishClicked}
-          >
-
-          </StyledButton>
+          ></StyledButton>
 
           <Stack alignItems="baseline" gap={1} padding={0.5} direction="row" flexShrink={0}>
-              <Typography color="text.secondary" variant="body2" component="label">
-                Linear Speed
-              </Typography>
-              <Stack alignItems="baseline" gap={1} padding={0.5} direction="row" flexShrink={0}>
+            <Typography color="text.secondary" variant="body2" component="label">
+              Linear Speed
+            </Typography>
+            <Stack alignItems="baseline" gap={1} padding={0.5} direction="row" flexShrink={0}>
               <StyledButton
-                  variant="contained"
-                  size="large"
-                  buttonColor={buttonColor ? buttonColor : undefined}
-                  title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
-                  disabled={!canPublish || parsedObject == undefined}
-                  onClick={onPublishClicked}
-                >
-              </StyledButton>
+                variant="contained"
+                size="large"
+                buttonColor={buttonColor ? buttonColor : undefined}
+                title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
+                disabled={!canPublish || parsedObject == undefined}
+                onClick={onPublishClicked}
+              ></StyledButton>
               <StyledButton
-                  variant="contained"
-                  size="large"
-                  buttonColor={buttonColor ? buttonColor : undefined}
-                  title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
-                  disabled={!canPublish || parsedObject == undefined}
-                  onClick={onPublishClicked}
-                >
-              </StyledButton>
-              </Stack>
-
+                variant="contained"
+                size="large"
+                buttonColor={buttonColor ? buttonColor : undefined}
+                title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
+                disabled={!canPublish || parsedObject == undefined}
+                onClick={onPublishClicked}
+              ></StyledButton>
+            </Stack>
           </Stack>
 
           <Stack alignItems="baseline" gap={1} padding={0.5} direction="row" flexShrink={0}>
-              <Typography color="text.secondary" variant="body2" component="label">
-                Angular Speed
-              </Typography>
-              <Stack alignItems="baseline" gap={1} padding={0.5} direction="row" flexShrink={0}>
+            <Typography color="text.secondary" variant="body2" component="label">
+              Angular Speed
+            </Typography>
+            <Stack alignItems="baseline" gap={1} padding={0.5} direction="row" flexShrink={0}>
               <StyledButton
-                  variant="contained"
-                  size="large"
-                  buttonColor={buttonColor ? buttonColor : undefined}
-                  title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
-                  disabled={!canPublish || parsedObject == undefined}
-                  onClick={onPublishClicked}
-                >
-              </StyledButton>
+                variant="contained"
+                size="large"
+                buttonColor={buttonColor ? buttonColor : undefined}
+                title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
+                disabled={!canPublish || parsedObject == undefined}
+                onClick={onPublishClicked}
+              ></StyledButton>
               <StyledButton
-                  variant="contained"
-                  size="large"
-                  buttonColor={buttonColor ? buttonColor : undefined}
-                  title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
-                  disabled={!canPublish || parsedObject == undefined}
-                  onClick={onPublishClicked}
-                >
-              </StyledButton>
-              </Stack>
-
+                variant="contained"
+                size="large"
+                buttonColor={buttonColor ? buttonColor : undefined}
+                title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
+                disabled={!canPublish || parsedObject == undefined}
+                onClick={onPublishClicked}
+              ></StyledButton>
+            </Stack>
           </Stack>
-
-
         </Stack>
       )}
     </Stack>
@@ -447,7 +466,6 @@ function Publish(props: Props) {
 
     </div>
     */
-
   );
 }
 
@@ -455,8 +473,8 @@ export default Panel(
   Object.assign(React.memo(Publish), {
     panelType: "Publish",
     defaultConfig: {
-      topicName: "hmm",
-      datatype: "",
+      topicName: "/crop_rows",
+      datatype: "row_info/Croprow",
       buttonText: "test",
       buttonTooltip: "",
       buttonColor: "#00A871",
