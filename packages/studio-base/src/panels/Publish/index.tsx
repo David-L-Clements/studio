@@ -48,6 +48,7 @@ import croprowalt from "./crop_row_image_reflected.png";
 //
 
 import helpContent from "./index.help.md";
+import PuzzleCube24Regular from "@fluentui/react-icons/lib/esm/components/PuzzleCube24Regular";
 
 type Config = Partial<{
   topicName: string;
@@ -119,9 +120,54 @@ const StyledTextarea = muiStyled(OutlinedInput)(({ theme }) => ({
   },
 }));
 
-const testTopPub = {
-  command: 5,
-  row: "row 1",
+const top11 = {
+  command: 1,
+  row: "row 11",
+};
+
+const top12 = {
+  command: 1,
+  row: "row 12",
+};
+
+const top13 = {
+  command: 1,
+  row: "row 13",
+};
+
+const top14 = {
+  command: 1,
+  row: "row 14",
+};
+
+const top15 = {
+  command: 1,
+  row: "row 15",
+};
+
+const top21 = {
+  command: 1,
+  row: "row 21",
+};
+
+const top22 = {
+  command: 1,
+  row: "row 22",
+};
+
+const top23 = {
+  command: 1,
+  row: "row 23",
+};
+
+const top24 = {
+  command: 1,
+  row: "row 24",
+};
+
+const top25 = {
+  command: 1,
+  row: "row 25",
 };
 
 function getTopicName(topic: Topic): string {
@@ -252,8 +298,8 @@ function Publish(props: Props) {
 
   const onPublishClicked = useRethrow(
     useCallback(() => {
-      if (topicName.length !== 0 && testTopPub != undefined) {
-        publish(testTopPub as Record<string, unknown>);
+      if (topicName.length !== 0 && parsedObject != undefined) {
+        publish(parsedObject as Record<string, unknown>);
       } else {
         throw new Error(`called _publish() when input was invalid`);
       }
@@ -261,7 +307,7 @@ function Publish(props: Props) {
       console.log(datatype);
       console.log("datatypes");
       console.log(datatypes);
-    }, [publish, testTopPub, topicName]),
+    }, [publish, parsedObject, topicName]),
   );
 
   const onOperationModeClicked = useRethrow(
@@ -280,9 +326,112 @@ function Publish(props: Props) {
     }, [publish, parsedObject, topicName]),
   );
 
+  // I am aware that this is an absolutely horrendous way to do this but I can't figure out how to get functions accept parameters lol
+  const pub11 = useRethrow(
+    useCallback(() => {
+      if (topicName.length !== 0 && top11 != undefined) {
+        publish(top11 as Record<string, unknown>);
+      } else {
+        throw new Error(`called _publish() when input was invalid`);
+      }
+    }, [publish, top11, topicName]),
+  );
+
+  const pub12 = useRethrow(
+    useCallback(() => {
+      if (topicName.length !== 0 && top12 != undefined) {
+        publish(top12 as Record<string, unknown>);
+      } else {
+        throw new Error(`called _publish() when input was invalid`);
+      }
+    }, [publish, top12, topicName]),
+  );
+
+  const pub13 = useRethrow(
+    useCallback(() => {
+      if (topicName.length !== 0 && top13 != undefined) {
+        publish(top13 as Record<string, unknown>);
+      } else {
+        throw new Error(`called _publish() when input was invalid`);
+      }
+    }, [publish, top13, topicName]),
+  );
+
+  const pub14 = useRethrow(
+    useCallback(() => {
+      if (topicName.length !== 0 && top14 != undefined) {
+        publish(top14 as Record<string, unknown>);
+      } else {
+        throw new Error(`called _publish() when input was invalid`);
+      }
+    }, [publish, top14, topicName]),
+  );
+
+  const pub15 = useRethrow(
+    useCallback(() => {
+      if (topicName.length !== 0 && top15 != undefined) {
+        publish(top15 as Record<string, unknown>);
+      } else {
+        throw new Error(`called _publish() when input was invalid`);
+      }
+    }, [publish, top15, topicName]),
+  );
+
+  const pub21 = useRethrow(
+    useCallback(() => {
+      if (topicName.length !== 0 && top21 != undefined) {
+        publish(top21 as Record<string, unknown>);
+      } else {
+        throw new Error(`called _publish() when input was invalid`);
+      }
+    }, [publish, top21, topicName]),
+  );
+
+  const pub22 = useRethrow(
+    useCallback(() => {
+      if (topicName.length !== 0 && top22 != undefined) {
+        publish(top22 as Record<string, unknown>);
+      } else {
+        throw new Error(`called _publish() when input was invalid`);
+      }
+    }, [publish, top22, topicName]),
+  );
+
+  const pub23 = useRethrow(
+    useCallback(() => {
+      if (topicName.length !== 0 && top23 != undefined) {
+        publish(top23 as Record<string, unknown>);
+      } else {
+        throw new Error(`called _publish() when input was invalid`);
+      }
+    }, [publish, top23, topicName]),
+  );
+
+  const pub24 = useRethrow(
+    useCallback(() => {
+      if (topicName.length !== 0 && top24 != undefined) {
+        publish(top24 as Record<string, unknown>);
+      } else {
+        throw new Error(`called _publish() when input was invalid`);
+      }
+    }, [publish, top24, topicName]),
+  );
+
+  const pub25 = useRethrow(
+    useCallback(() => {
+      if (topicName.length !== 0 && top25 != undefined) {
+        publish(top25 as Record<string, unknown>);
+      } else {
+        throw new Error(`called _publish() when input was invalid`);
+      }
+    }, [publish, top25, topicName]),
+  );
+
+
   const canPublish = capabilities.includes(PlayerCapabilities.advertise);
 
   return (
+    /*
     <div
       id="container"
       style={{
@@ -300,9 +449,8 @@ function Publish(props: Props) {
           //buttonText = "other test 0"
           buttonColor={buttonColor ? buttonColor : undefined}
           title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
-          onClick={onPublishClicked}
+          onClick={testDefaultTopic}
         ></StyledButton>
-
         <Button></Button>
       </div>
       <div>
@@ -313,25 +461,136 @@ function Publish(props: Props) {
         <Button></Button>
         <Button></Button>
       </div>
-    </div>
+    </div> */
 
-    //   <Stack flex-direction="row" >
-    //     <Stack direction="row">
-    //     <button></button>
-    //     </Stack>
-    //     <Stack direction="row">
-    //     <button></button>
-    //     </Stack>
-    //     <Stack direction="row">
-    //     <button></button>
-    //     </Stack>
-    //     <Stack direction="row">
-    //     <button></button>
-    //     </Stack>
-    //     <Stack direction="row">
-    //     <button></button>
-    //     </Stack>
-    //   </Stack>
+
+    <Stack fullHeight style={{
+      backgroundImage: `url(${croprowalt})`,
+    }}>
+      <PanelToolbar helpContent={helpContent} />
+      {advancedView && (
+        <Stack flex="auto" padding={10} gap={2} paddingBottom={0}>
+          <div style={{ backgroundImage: "url(" + "C:/Users/mrdav/Desktop" + ")" }}>
+            <Stack alignItems="baseline" gap={1} padding={0.5} direction="row" flexShrink={0}>
+              <Typography color="text.secondary" variant="body2" component="label">
+                Topic:
+              </Typography>
+              <Autocomplete
+                placeholder="Choose a topic"
+                items={[...topics]}
+                hasError={false}
+                onChange={onChangeTopic}
+                onSelect={onSelectTopic}
+                selectedItem={{ name: topicName, datatype: "" }}
+                getItemText={getTopicName}
+                getItemValue={getTopicName}
+              />
+            </Stack>
+            <Stack alignItems="baseline" gap={1} padding={0.5} direction="row" flexShrink={0}>
+              <Typography color="text.secondary" variant="body2" component="label">
+                Datatype:
+              </Typography>
+              <Autocomplete
+                clearOnFocus
+                placeholder="Choose a datatype"
+                items={datatypeNames}
+                onSelect={onSelectDatatype}
+                selectedItem={datatype}
+              />
+            </Stack>
+          </div>
+
+          <Stack direction="row" alignItems="center" padding={10}>
+            <Stack direction="column" gap = {5} padding = {10}>
+              <StyledButton
+              variant="contained"
+              size="large"
+              buttonColor={buttonColor ? buttonColor : undefined}
+              title={"test"}
+              onClick={pub11}
+            ></StyledButton>
+              <StyledButton
+              variant="contained"
+              size="large"
+              buttonColor={buttonColor ? buttonColor : undefined}
+              title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
+              onClick={pub21}
+            ></StyledButton>
+            </Stack>
+
+            <Stack direction="column" gap = {5} padding = {10}>
+              <StyledButton
+              variant="contained"
+              size="large"
+              buttonColor={buttonColor ? buttonColor : undefined}
+              title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
+              onClick={pub12}
+            ></StyledButton>
+              <StyledButton
+              variant="contained"
+              size="large"
+              buttonColor={buttonColor ? buttonColor : undefined}
+              title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
+              onClick={pub22}
+            ></StyledButton>
+            </Stack>
+
+            <Stack direction="column" gap = {5} padding = {10}>
+              <StyledButton
+              variant="contained"
+              size="large"
+              buttonColor={buttonColor ? buttonColor : undefined}
+              title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
+              onClick={pub13}
+            ></StyledButton>
+              <StyledButton
+              variant="contained"
+              size="large"
+              buttonColor={buttonColor ? buttonColor : undefined}
+              title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
+              onClick={pub23}
+            ></StyledButton>
+            </Stack>
+
+            <Stack direction="column" gap = {5} padding = {10}>
+              <StyledButton
+              variant="contained"
+              size="large"
+              buttonColor={buttonColor ? buttonColor : undefined}
+              title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
+              onClick={pub14}
+            ></StyledButton>
+              <StyledButton
+              variant="contained"
+              size="large"
+              buttonColor={buttonColor ? buttonColor : undefined}
+              title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
+              onClick={pub24}
+            ></StyledButton>
+            </Stack>
+
+            <Stack direction="column" gap = {5} padding = {10}>
+              <StyledButton
+              variant="contained"
+              size="large"
+              buttonColor={buttonColor ? buttonColor : undefined}
+              title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
+              onClick={pub15}
+            ></StyledButton>
+              <StyledButton
+              variant="contained"
+              size="large"
+              buttonColor={buttonColor ? buttonColor : undefined}
+              title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
+              onClick={pub25}
+            ></StyledButton>
+            </Stack>
+
+          </Stack>
+
+        </Stack>
+      )}
+    </Stack>
 
     // </div>
     /*
