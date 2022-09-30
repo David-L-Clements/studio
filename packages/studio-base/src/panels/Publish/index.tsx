@@ -44,6 +44,7 @@ import { fonts } from "@foxglove/studio-base/util/sharedStyleConstants";
 //import croprows from './crop_rows.png';
 import buildSampleMessage from "./buildSampleMessage";
 import croprowalt from "./crop_row_image_reflected.png";
+import positiontest from "./crop_row_position_test.png";
 
 //
 
@@ -465,7 +466,7 @@ function Publish(props: Props) {
 
 
     <Stack fullHeight style={{
-      backgroundImage: `url(${croprowalt})`,
+      backgroundImage: `url(${positiontest})`,
     }}>
       <PanelToolbar helpContent={helpContent} />
       {advancedView && (
