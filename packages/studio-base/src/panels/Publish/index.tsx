@@ -22,7 +22,7 @@ import { Button, Typography, styled as muiStyled, OutlinedInput } from "@mui/mat
 import { IconButton, TextFieldProps, TextField, styled as muiStyled } from "@mui/material";
 import produce from "immer";
 import { set } from "lodash";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useRethrow } from "@foxglove/hooks";
 import { SettingsTreeAction, SettingsTreeNodes } from "@foxglove/studio";
@@ -206,6 +206,66 @@ const divStyle  {
 }
 */
 
+var mything = 1;
+
+var row_states = [["Waiting","Waiting"],["Waiting","Waiting"],["Waiting","Waiting"],["Waiting","Waiting"],["Waiting","Waiting"]];
+
+class RowInfo extends React.Component{
+  constructor(props){
+    super(props);
+    this.state = {row_state: "Waiting"}
+  }
+
+  schedule_activity = () =>{
+    // Change the state of the crop row
+    if (this.state.row_state == "Waiting"){
+      this.setState({
+        row_state: "Scheduled"
+      });
+    } else {
+      this.setState({
+        row_state: "Waiting"
+      });
+    }
+
+    // Publish this to the topic
+    mything = mything + 1;
+    //console.log(mything);
+
+  }
+
+  override render(): React.ReactNode {
+    return(
+      <div>
+        <button onClick={this.schedule_activity}>{this.state.row_state}</button>
+      </div>
+    )
+  }
+}
+
+function fRowInfo(){
+  const [rowState, setRowState] = useState('Waiting');
+
+  const schedule_activity = () =>{
+    if (rowState == "Waiting"){
+      useEffect(() => {
+        setRowState('Scheduled')
+      });
+    } else {
+      useEffect(() => {
+
+      });
+    }
+  }
+
+  return(
+    <div>
+      <button onClick={schedule_activity}>{rowState}</button>
+    </div>
+  )
+
+}
+
 function Publish(props: Props) {
   const { topics, datatypes, capabilities } = useDataSourceInfo();
   const {
@@ -220,10 +280,6 @@ function Publish(props: Props) {
     },
     saveConfig,
   } = props;
-
-  const mydatatype = "row_info/Croprow";
-  const mydatatypes = "";
-  const mytopicName = "/crop_rows";
 
   const publish = usePublisher({ name: "Publish", topic: topicName, datatype, datatypes });
 
@@ -330,11 +386,16 @@ function Publish(props: Props) {
   // I am aware that this is an absolutely horrendous way to do this but I can't figure out how to get functions accept parameters lol
   const pub11 = useRethrow(
     useCallback(() => {
+      /*
       if (topicName.length !== 0 && top11 != undefined) {
         publish(top11 as Record<string, unknown>);
       } else {
         throw new Error(`called _publish() when input was invalid`);
-      }
+      }*/
+      console.log(row_states[0][0]);
+      row_states[0][0] = "Scheduled";
+      console.log(row_states[0][0]);
+
     }, [publish, top11, topicName]),
   );
 
@@ -428,8 +489,19 @@ function Publish(props: Props) {
     }, [publish, top25, topicName]),
   );
 
-
   const canPublish = capabilities.includes(PlayerCapabilities.advertise);
+
+  const [rowState, setRowState] = useState('Waiting');
+
+  const schedule_activity = () =>{
+    if (rowState == "Waiting"){
+      setRowState('Scheduled')
+      publish(top11 as Record<string, unknown>);
+    } else {
+      setRowState('Waiting')
+    }
+  }
+
 
   return (
     /*
@@ -502,7 +574,7 @@ function Publish(props: Props) {
           </div>
 
           <Stack direction="row" alignItems="center" padding={10}>
-            <Stack direction="column" gap = {5} padding = {10}>
+            <Stack direction="column" gap = {1} padding = {5}>
               <StyledButton
               variant="contained"
               size="large"
@@ -510,6 +582,7 @@ function Publish(props: Props) {
               title={"test"}
               onClick={pub11}
             ></StyledButton>
+              <button onClick={schedule_activity}>{rowState}</button>
               <StyledButton
               variant="contained"
               size="large"
