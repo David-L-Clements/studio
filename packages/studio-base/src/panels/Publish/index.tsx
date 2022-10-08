@@ -41,10 +41,12 @@ import { fonts } from "@foxglove/studio-base/util/sharedStyleConstants";
 
 // my added imports
 
+
 //import croprows from './crop_rows.png';
 import buildSampleMessage from "./buildSampleMessage";
 import croprowalt from "./crop_row_image_reflected.png";
 import positiontest from "./crop_row_position_test.png";
+import singlerow from "./singlerow.png"
 
 //
 
@@ -491,15 +493,161 @@ function Publish(props: Props) {
 
   const canPublish = capabilities.includes(PlayerCapabilities.advertise);
 
-  const [rowState, setRowState] = useState('Waiting');
+  const [rowState, setRowState] = useState([['Waiting', 'Waiting'], ['Waiting', 'Waiting'], ['Waiting', 'Waiting'], ['Waiting', 'Waiting'], ['Waiting', 'Waiting']]);
 
-  const schedule_activity = () =>{
-    if (rowState == "Waiting"){
-      setRowState('Scheduled')
-      publish(top11 as Record<string, unknown>);
-    } else {
-      setRowState('Waiting')
+  const [rowState11, setRow11] = useState("Waiting");
+  const [rowState12, setRow12] = useState("Waiting");
+  const [rowState21, setRow21] = useState("Waiting");
+  const [rowState22, setRow22] = useState("Waiting");
+  const [rowState31, setRow31] = useState("Waiting");
+  const [rowState32, setRow32] = useState("Waiting");
+  const [rowState41, setRow41] = useState("Waiting");
+  const [rowState42, setRow42] = useState("Waiting");
+  const [rowState51, setRow51] = useState("Waiting");
+  const [rowState52, setRow52] = useState("Waiting");
+
+  const schedule_activity = (event, crop_index) =>{
+
+    switch(crop_index){
+      case '11':
+        if (rowState11 == "Waiting"){
+          setRow11("Scheduled")
+          top11.command = 1;
+          pub11
+
+        } else{
+          setRow11("Waiting")
+          top11.command = 0;
+          pub11;
+        }
+      break;
+
+      case '12':
+        if (rowState12 == "Waiting"){
+          setRow12("Scheduled")
+          top21.command = 1;
+          pub21;
+        } else{
+          setRow12("Waiting")
+          top21.command = 0
+          pub21;
+        }
+      break;
+
+      case '21':
+        if (rowState21 == "Waiting"){
+          setRow21("Scheduled")
+          top12.command = 1;
+          pub12;
+        } else{
+          setRow21("Waiting")
+          top12.command = 0;
+          pub12;
+        }
+      break;
+
+      case '22':
+        if (rowState22 == "Waiting"){
+          setRow22("Scheduled")
+          top22.command = 1;
+          pub22;
+        } else{
+          setRow22("Waiting")
+          top22.command = 0;
+          pub22;
+        }
+      break;
+
+      case '31':
+        if (rowState31 == "Waiting"){
+          setRow31("Scheduled")
+          top13.command = 1;
+          pub13;
+        } else{
+          setRow31("Waiting")
+          top13.command = 0;
+          pub13;
+        }
+      break;
+
+      case '32':
+        if (rowState32 == "Waiting"){
+          setRow32("Scheduled")
+          top23.command = 1;
+          pub23;
+        } else{
+          setRow32("Waiting")
+          top23.command = 0;
+          pub23;
+        }
+      break;
+
+      case '41':
+        if (rowState41 == "Waiting"){
+          setRow41("Scheduled")
+          top14.command = 1;
+          pub14;
+        } else{
+          setRow41("Waiting")
+          top14.command = 0;
+          pub14;
+        }
+      break;
+
+      case '42':
+        if (rowState42 == "Waiting"){
+          setRow42("Scheduled")
+          top24.command = 1;
+          pub24;
+        } else{
+          setRow42("Waiting")
+          top24.command = 0;
+          pub24;
+        }
+      break;
+
+      case '51':
+        if (rowState11 == "Waiting"){
+          setRow51("Scheduled")
+          top15.command = 1;
+          pub15;
+        } else{
+          setRow51("Waiting")
+          top15.command = 0;
+          pub15;
+        }
+      break;
+
+      case '52':
+        if (rowState11 == "Waiting"){
+          setRow52("Scheduled")
+          top25.command = 1;
+          pub25;
+        } else{
+          setRow52("Waiting")
+          top25.command = 0;
+          pub25;
+        }
+      break;
+
     }
+    /*
+    if (rowState == "Waiting"){
+
+      var temp = rowState;
+      temp[columnNumber][rowNumber] = 'Scheduled'
+      setRowState(temp)
+      //console.log(rowNumber);
+
+
+      //publish(top11 as Record<string, unknown>);
+    } else {
+      var temp = rowState;
+      temp[columnNumber][rowNumber] = 'Scheduled'
+      setRowState(temp)
+      console.log(rowState)
+    }
+    */
   }
 
 
@@ -573,91 +721,42 @@ function Publish(props: Props) {
             </Stack>
           </div>
 
-          <Stack direction="row" alignItems="center" padding={10}>
-            <Stack direction="column" gap = {1} padding = {5}>
-              <StyledButton
-              variant="contained"
-              size="large"
-              buttonColor={buttonColor ? buttonColor : undefined}
-              title={"test"}
-              onClick={pub11}
-            ></StyledButton>
-              <button onClick={schedule_activity}>{rowState}</button>
-              <StyledButton
-              variant="contained"
-              size="large"
-              buttonColor={buttonColor ? buttonColor : undefined}
-              title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
-              onClick={pub21}
-            ></StyledButton>
+          <Stack direction="row" alignItems="center" padding={10} >
+            <Stack direction="column" gap = {5} padding = {10}>
+
+              <button onClick={event => schedule_activity(event,'11')}>{rowState11}</button>
+              <button onClick={event => schedule_activity(event,'12')}>{rowState12}</button>
+
+
             </Stack>
 
             <Stack direction="column" gap = {5} padding = {10}>
-              <StyledButton
-              variant="contained"
-              size="large"
-              buttonColor={buttonColor ? buttonColor : undefined}
-              title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
-              onClick={pub12}
-            ></StyledButton>
-              <StyledButton
-              variant="contained"
-              size="large"
-              buttonColor={buttonColor ? buttonColor : undefined}
-              title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
-              onClick={pub22}
-            ></StyledButton>
+
+              <button onClick={event => schedule_activity(event,'21')}>{rowState21}</button>
+              <button onClick={event => schedule_activity(event,'22')}>{rowState22}</button>
+
+
             </Stack>
 
             <Stack direction="column" gap = {5} padding = {10}>
-              <StyledButton
-              variant="contained"
-              size="large"
-              buttonColor={buttonColor ? buttonColor : undefined}
-              title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
-              onClick={pub13}
-            ></StyledButton>
-              <StyledButton
-              variant="contained"
-              size="large"
-              buttonColor={buttonColor ? buttonColor : undefined}
-              title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
-              onClick={pub23}
-            ></StyledButton>
+
+              <button onClick={event => schedule_activity(event,'31')}>{rowState31}</button>
+              <button onClick={event => schedule_activity(event,'32')}>{rowState32}</button>
+
             </Stack>
 
             <Stack direction="column" gap = {5} padding = {10}>
-              <StyledButton
-              variant="contained"
-              size="large"
-              buttonColor={buttonColor ? buttonColor : undefined}
-              title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
-              onClick={pub14}
-            ></StyledButton>
-              <StyledButton
-              variant="contained"
-              size="large"
-              buttonColor={buttonColor ? buttonColor : undefined}
-              title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
-              onClick={pub24}
-            ></StyledButton>
+
+              <button onClick={event => schedule_activity(event,'41')}>{rowState41}</button>
+              <button onClick={event => schedule_activity(event,'42')}>{rowState42}</button>
+
             </Stack>
 
             <Stack direction="column" gap = {5} padding = {10}>
-              <StyledButton
-              variant="contained"
-              size="large"
-              buttonColor={buttonColor ? buttonColor : undefined}
-              title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
-              onClick={pub15}
-            ></StyledButton>
-              <StyledButton
-              variant="contained"
-              size="large"
-              buttonColor={buttonColor ? buttonColor : undefined}
-              title={canPublish ? buttonTooltip : "Connect to ROS to publish data"}
-              onClick={pub25}
-            ></StyledButton>
+
+              <button onClick={event => schedule_activity(event,'51')}>{rowState51}</button>
+              <button onClick={event => schedule_activity(event,'52')}>{rowState52}</button>
+
             </Stack>
 
           </Stack>
