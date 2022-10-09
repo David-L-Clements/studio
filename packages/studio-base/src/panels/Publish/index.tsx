@@ -16,6 +16,7 @@
 //   found at http://www.apache.org/licenses/LICENSE-2.0
 //   You may not use this file except in compliance with the License.
 
+import PuzzleCube24Regular from "@fluentui/react-icons/lib/esm/components/PuzzleCube24Regular";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { Button, Typography, styled as muiStyled, OutlinedInput } from "@mui/material";
@@ -41,17 +42,14 @@ import { fonts } from "@foxglove/studio-base/util/sharedStyleConstants";
 
 // my added imports
 
-
 //import croprows from './crop_rows.png';
 import buildSampleMessage from "./buildSampleMessage";
 import croprowalt from "./crop_row_image_reflected.png";
 import positiontest from "./crop_row_position_test.png";
-import singlerow from "./singlerow.png"
+import helpContent from "./index.help.md";
+import singlerow from "./singlerow.png";
 
 //
-
-import helpContent from "./index.help.md";
-import PuzzleCube24Regular from "@fluentui/react-icons/lib/esm/components/PuzzleCube24Regular";
 
 type Config = Partial<{
   topicName: string;
@@ -208,64 +206,66 @@ const divStyle  {
 }
 */
 
-var mything = 1;
+let mything = 1;
 
-var row_states = [["Waiting","Waiting"],["Waiting","Waiting"],["Waiting","Waiting"],["Waiting","Waiting"],["Waiting","Waiting"]];
+const row_states = [
+  ["Waiting", "Waiting"],
+  ["Waiting", "Waiting"],
+  ["Waiting", "Waiting"],
+  ["Waiting", "Waiting"],
+  ["Waiting", "Waiting"],
+];
 
-class RowInfo extends React.Component{
-  constructor(props){
+class RowInfo extends React.Component {
+  constructor(props) {
     super(props);
-    this.state = {row_state: "Waiting"}
+    this.state = { row_state: "Waiting" };
   }
 
-  schedule_activity = () =>{
+  schedule_activity = () => {
     // Change the state of the crop row
-    if (this.state.row_state == "Waiting"){
+    if (this.state.row_state == "Waiting") {
       this.setState({
-        row_state: "Scheduled"
+        row_state: "Scheduled",
       });
     } else {
       this.setState({
-        row_state: "Waiting"
+        row_state: "Waiting",
       });
     }
 
     // Publish this to the topic
     mything = mything + 1;
     //console.log(mything);
-
-  }
+  };
 
   override render(): React.ReactNode {
-    return(
+    return (
       <div>
         <button onClick={this.schedule_activity}>{this.state.row_state}</button>
       </div>
-    )
+    );
   }
 }
 
-function fRowInfo(){
-  const [rowState, setRowState] = useState('Waiting');
+function fRowInfo() {
+  const [rowState, setRowState] = useState("Waiting");
 
-  const schedule_activity = () =>{
-    if (rowState == "Waiting"){
+  const schedule_activity = () => {
+    if (rowState == "Waiting") {
       useEffect(() => {
-        setRowState('Scheduled')
+        setRowState("Scheduled");
       });
     } else {
-      useEffect(() => {
-
-      });
+      useEffect(() => {});
     }
-  }
+  };
 
-  return(
+  return (
     <div>
       <button onClick={schedule_activity}>{rowState}</button>
     </div>
-  )
-
+  );
 }
 
 function Publish(props: Props) {
@@ -397,7 +397,6 @@ function Publish(props: Props) {
       console.log(row_states[0][0]);
       row_states[0][0] = "Scheduled";
       console.log(row_states[0][0]);
-
     }, [publish, top11, topicName]),
   );
 
@@ -493,7 +492,13 @@ function Publish(props: Props) {
 
   const canPublish = capabilities.includes(PlayerCapabilities.advertise);
 
-  const [rowState, setRowState] = useState([['Waiting', 'Waiting'], ['Waiting', 'Waiting'], ['Waiting', 'Waiting'], ['Waiting', 'Waiting'], ['Waiting', 'Waiting']]);
+  const [rowState, setRowState] = useState([
+    ["Waiting", "Waiting"],
+    ["Waiting", "Waiting"],
+    ["Waiting", "Waiting"],
+    ["Waiting", "Waiting"],
+    ["Waiting", "Waiting"],
+  ]);
 
   const [rowState11, setRow11] = useState("Waiting");
   const [rowState12, setRow12] = useState("Waiting");
@@ -506,130 +511,127 @@ function Publish(props: Props) {
   const [rowState51, setRow51] = useState("Waiting");
   const [rowState52, setRow52] = useState("Waiting");
 
-  const schedule_activity = (event, crop_index) =>{
-
-    switch(crop_index){
-      case '11':
-        if (rowState11 == "Waiting"){
-          setRow11("Scheduled")
+  const schedule_activity = (event, crop_index) => {
+    switch (crop_index) {
+      case "11":
+        if (rowState11 == "Waiting") {
+          setRow11("Scheduled");
           top11.command = 1;
-          pub11
-
-        } else{
-          setRow11("Waiting")
+          pub11();
+        } else {
+          setRow11("Waiting");
           top11.command = 0;
-          pub11;
+          pub11();
         }
-      break;
+        break;
 
-      case '12':
-        if (rowState12 == "Waiting"){
-          setRow12("Scheduled")
+      case "12":
+        if (rowState12 == "Waiting") {
+          setRow12("Scheduled");
           top21.command = 1;
-          pub21;
-        } else{
-          setRow12("Waiting")
-          top21.command = 0
-          pub21;
+          pub21();
+        } else {
+          setRow12("Waiting");
+          top21.command = 0;
+          pub21();
         }
-      break;
+        break;
 
-      case '21':
-        if (rowState21 == "Waiting"){
-          setRow21("Scheduled")
+      case "21":
+        if (rowState21 == "Waiting") {
+          setRow21("Scheduled");
           top12.command = 1;
-          pub12;
-        } else{
-          setRow21("Waiting")
+          pub12();
+        } else {
+          setRow21("Waiting");
           top12.command = 0;
-          pub12;
+          pub12();
         }
-      break;
+        break;
 
-      case '22':
-        if (rowState22 == "Waiting"){
-          setRow22("Scheduled")
+      case "22":
+        if (rowState22 == "Waiting") {
+          setRow22("Scheduled");
           top22.command = 1;
-          pub22;
-        } else{
-          setRow22("Waiting")
+          pub22();
+        } else {
+          setRow22("Waiting");
           top22.command = 0;
-          pub22;
+          pub22();
         }
-      break;
+        break;
 
-      case '31':
-        if (rowState31 == "Waiting"){
-          setRow31("Scheduled")
+      case "31":
+        if (rowState31 == "Waiting") {
+          setRow31("Scheduled");
           top13.command = 1;
-          pub13;
-        } else{
-          setRow31("Waiting")
+          pub13();
+        } else {
+          setRow31("Waiting");
           top13.command = 0;
-          pub13;
+          pub13();
         }
-      break;
+        break;
 
-      case '32':
-        if (rowState32 == "Waiting"){
-          setRow32("Scheduled")
+      case "32":
+        if (rowState32 == "Waiting") {
+          setRow32("Scheduled");
           top23.command = 1;
-          pub23;
-        } else{
-          setRow32("Waiting")
+          pub23();
+        } else {
+          setRow32("Waiting");
           top23.command = 0;
-          pub23;
+          pub23();
         }
-      break;
+        break;
 
-      case '41':
-        if (rowState41 == "Waiting"){
-          setRow41("Scheduled")
+      case "41":
+        if (rowState41 == "Waiting") {
+          setRow41("Scheduled");
           top14.command = 1;
-          pub14;
-        } else{
-          setRow41("Waiting")
+          pub14();
+        } else {
+          setRow41("Waiting");
           top14.command = 0;
-          pub14;
+          pub14();
         }
-      break;
+        break;
 
-      case '42':
-        if (rowState42 == "Waiting"){
-          setRow42("Scheduled")
+      case "42":
+        if (rowState42 == "Waiting") {
+          setRow42("Scheduled");
           top24.command = 1;
-          pub24;
-        } else{
-          setRow42("Waiting")
+          pub24();
+        } else {
+          setRow42("Waiting");
           top24.command = 0;
-          pub24;
+          pub24();
         }
-      break;
+        break;
 
-      case '51':
-        if (rowState11 == "Waiting"){
-          setRow51("Scheduled")
+      case "51":
+        if (rowState11 == "Waiting") {
+          setRow51("Scheduled");
           top15.command = 1;
-          pub15;
-        } else{
-          setRow51("Waiting")
+          pub15();
+        } else {
+          setRow51("Waiting");
           top15.command = 0;
-          pub15;
+          pub15();
         }
-      break;
+        break;
 
-      case '52':
-        if (rowState11 == "Waiting"){
-          setRow52("Scheduled")
+      case "52":
+        if (rowState11 == "Waiting") {
+          setRow52("Scheduled");
           top25.command = 1;
-          pub25;
-        } else{
-          setRow52("Waiting")
+          pub25();
+        } else {
+          setRow52("Waiting");
           top25.command = 0;
-          pub25;
+          pub25();
         }
-      break;
-
+        break;
     }
     /*
     if (rowState == "Waiting"){
@@ -648,8 +650,7 @@ function Publish(props: Props) {
       console.log(rowState)
     }
     */
-  }
-
+  };
 
   return (
     /*
@@ -684,10 +685,12 @@ function Publish(props: Props) {
       </div>
     </div> */
 
-
-    <Stack fullHeight style={{
-      backgroundImage: `url(${positiontest})`,
-    }}>
+    <Stack
+      fullHeight
+      style={{
+        backgroundImage: `url(${positiontest})`,
+      }}
+    >
       <PanelToolbar helpContent={helpContent} />
       {advancedView && (
         <Stack flex="auto" padding={10} gap={2} paddingBottom={0}>
@@ -721,46 +724,32 @@ function Publish(props: Props) {
             </Stack>
           </div>
 
-          <Stack direction="row" alignItems="center" padding={10} >
-            <Stack direction="column" gap = {5} padding = {10}>
-
-              <button onClick={event => schedule_activity(event,'11')}>{rowState11}</button>
-              <button onClick={event => schedule_activity(event,'12')}>{rowState12}</button>
-
-
+          <Stack direction="row" alignItems="center" padding={10}>
+            <Stack direction="column" gap={5} padding={10}>
+              <button onClick={(event) => schedule_activity(event, "11")}>{rowState11}</button>
+              <button onClick={(event) => schedule_activity(event, "12")}>{rowState12}</button>
             </Stack>
 
-            <Stack direction="column" gap = {5} padding = {10}>
-
-              <button onClick={event => schedule_activity(event,'21')}>{rowState21}</button>
-              <button onClick={event => schedule_activity(event,'22')}>{rowState22}</button>
-
-
+            <Stack direction="column" gap={5} padding={10}>
+              <button onClick={(event) => schedule_activity(event, "21")}>{rowState21}</button>
+              <button onClick={(event) => schedule_activity(event, "22")}>{rowState22}</button>
             </Stack>
 
-            <Stack direction="column" gap = {5} padding = {10}>
-
-              <button onClick={event => schedule_activity(event,'31')}>{rowState31}</button>
-              <button onClick={event => schedule_activity(event,'32')}>{rowState32}</button>
-
+            <Stack direction="column" gap={5} padding={10}>
+              <button onClick={(event) => schedule_activity(event, "31")}>{rowState31}</button>
+              <button onClick={(event) => schedule_activity(event, "32")}>{rowState32}</button>
             </Stack>
 
-            <Stack direction="column" gap = {5} padding = {10}>
-
-              <button onClick={event => schedule_activity(event,'41')}>{rowState41}</button>
-              <button onClick={event => schedule_activity(event,'42')}>{rowState42}</button>
-
+            <Stack direction="column" gap={5} padding={10}>
+              <button onClick={(event) => schedule_activity(event, "41")}>{rowState41}</button>
+              <button onClick={(event) => schedule_activity(event, "42")}>{rowState42}</button>
             </Stack>
 
-            <Stack direction="column" gap = {5} padding = {10}>
-
-              <button onClick={event => schedule_activity(event,'51')}>{rowState51}</button>
-              <button onClick={event => schedule_activity(event,'52')}>{rowState52}</button>
-
+            <Stack direction="column" gap={5} padding={10}>
+              <button onClick={(event) => schedule_activity(event, "51")}>{rowState51}</button>
+              <button onClick={(event) => schedule_activity(event, "52")}>{rowState52}</button>
             </Stack>
-
           </Stack>
-
         </Stack>
       )}
     </Stack>
